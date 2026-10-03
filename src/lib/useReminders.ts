@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 
 import { useAppointments, useDoses, useLocalToday, useMedications, useMembership, useReminderPrefs } from '@/lib/data';
 import { askForPermission, clearScheduled, permissionState, replaceScheduled, type PermissionState } from '@/lib/notifications';
-import { planReminders, planSignature } from '@/lib/reminders';
+import { planReminders, planSignature, type PlannedReminder } from '@/lib/reminders';
 import { useSession } from '@/lib/session';
 
 /**
@@ -32,14 +32,19 @@ export function useNotificationPermission() {
   return { state, ask };
 }
 
+/** What the phone should be told next: this plan (with its signature), or to hold nothing. */
+type Wish = { plan: PlannedReminder[]; signature: string } | { plan: null };
+
 /**
  * Keeps the reminders scheduled on this phone matching this person's switches
  * and what the app knows: the vitamins still to take, the appointments, the
  * week of pregnancy. Mounted once, at the root.
  *
  * The phone is only touched once everything the plan depends on has loaded, so
- * a slow connection never wipes the reminders it already has. Signed out, or
- * with no pregnancy to follow, nothing stays scheduled.
+ * a slow connection never wipes the reminders it already has. Nothing stays
+ * scheduled once the person has signed out or the pregnancy is gone. A phone
+ * that opens with no sign-in at all (offline, with the last one out of date)
+ * keeps what it has until the sign-in comes back.
  */
 export function useReminders(): void {
   const { session, loading } = useSession();
@@ -52,9 +57,32 @@ export function useReminders(): void {
   const day = useLocalToday();
   const { state: permission, ask } = useNotificationPermission();
 
-  // One change to the phone at a time, and the last plan it was given.
-  const queue = useRef<Promise<void>>(Promise.resolve());
+  // The signature of the plan the phone was last given or is on its way to.
   const applied = useRef<string | null>(null);
+
+  // The phone is changed one step at a time, and only the newest wish is kept while a step is
+  // under way: a run of ticks costs one more pass over the phone, not one for every tick.
+  const wish = useRef<Wish | null>(null);
+  const working = useRef(false);
+  const request = useCallback(async (next: Wish) => {
+    wish.current = next;
+    if (working.current) return;
+    working.current = true;
+    try {
+      while (wish.current) {
+        const current = wish.current;
+        wish.current = null;
+        try {
+          await (current.plan ? replaceScheduled(current.plan) : clearScheduled());
+        } catch {
+          // The phone may be missing some of it, so the same plan is offered again on the next change.
+          if (current.plan && applied.current === current.signature) applied.current = null;
+        }
+      }
+    } finally {
+      working.current = false;
+    }
+  }, []);
 
   // The phone's prompt is shown the first time any reminder is switched on.
   const wantsAny = !!prefs.data && Object.values(prefs.data).some(Boolean);
@@ -79,16 +107,19 @@ export function useReminders(): void {
     const signature = planSignature(plan);
     if (signature === applied.current) return;
     applied.current = signature;
-    queue.current = queue.current.then(() => replaceScheduled(plan)).catch(() => {
-      applied.current = null;
-    });
-  }, [permission, pregnancy, prefs.data, medications.data, doses.data, appointments.data, day]);
+    request({ plan, signature });
+  }, [permission, pregnancy, prefs.data, medications.data, doses.data, appointments.data, day, request]);
 
-  // Nobody to remind: signed out, or the pregnancy is gone (a removed partner).
-  const nobody = !loading && (!session || (membership.isSuccess && membership.data === null));
+  // Nobody to remind: she signed out while the app was open, or the pregnancy is gone (a removed
+  // partner). Opening with no session is not the same as signing out, so it clears nothing.
+  const signedIn = !!session;
+  const wasSignedIn = useRef(false);
+  const removed = signedIn && membership.isSuccess && membership.data === null;
   useEffect(() => {
-    if (!nobody) return;
+    if (signedIn) wasSignedIn.current = true;
+    const signedOut = !signedIn && !loading && wasSignedIn.current;
+    if (!signedOut && !removed) return;
     applied.current = null;
-    queue.current = queue.current.then(clearScheduled).catch(() => {});
-  }, [nobody]);
+    request({ plan: null });
+  }, [signedIn, loading, removed, request]);
 }

@@ -126,9 +126,23 @@ Good to know:
 - A phone only updates its reminders while the app is open, so a dose ticked on
   the other phone is noticed the next time this app is opened; until then the
   reminder still arrives.
+- Signing out, or being removed from the pregnancy, clears a phone's reminders
+  the next time Bloom opens and sees it. Until then a removed partner's phone
+  keeps what it already had scheduled: up to a week of vitamin reminders and any
+  appointments, which name the medicines and the appointment. A phone that opens
+  with no sign-in at all (offline, with the old one out of date) keeps its
+  reminders too, so a bad connection never wipes them.
+- Reminders name medicines and appointments, so they show on a locked phone
+  unless iOS's Show Previews setting hides them. There is no "hide details"
+  switch yet.
+- The vitamin times are fixed for each slot (8 am, 2 pm, 9 pm).
+  `reminder_prefs.times` exists for custom times but nothing reads it yet.
 - An iPhone keeps only its 64 soonest notifications, so no more than 60 are
   scheduled; the furthest-away ones are added as the nearer ones pass.
 - On the web there is nothing to schedule, so reminders do nothing there.
+- On Android the status-bar icon is the template's monochrome glyph
+  (`assets/android-icon-monochrome.png`) tinted purple; swap in a Bloom glyph
+  when there is one. It only shows in a development or EAS build, not Expo Go.
 - The `expo-notifications` plugin adds iOS's push entitlement (`aps-environment`)
   to any native build, even though these reminders are local. EAS builds need
   the paid Apple Developer account anyway, but a free Apple ID can't sign an app

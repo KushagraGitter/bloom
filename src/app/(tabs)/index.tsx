@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BottomSheet, Button, CalendarIcon, Card, CheckIcon, Chip, Screen, SmileIcon, Text, TextField, TimerIcon } from '@/components';
-import { cardLine, dayLong, dayNumber, monthAbbr, nextUp } from '@/lib/appointments';
+import { cardLine, dayLong, dayNumber, localTime, monthAbbr, nextUp } from '@/lib/appointments';
 import {
   useAppointments,
   useDoses,
@@ -20,7 +20,7 @@ import {
   useToggleDose,
 } from '@/lib/data';
 import { shortDay, timeOf } from '@/lib/format';
-import { gestationalAge } from '@/lib/pregnancy';
+import { gestationalAge, localToday } from '@/lib/pregnancy';
 import { formatDate, initialOf } from '@/lib/profile';
 import {
   CHECKINS,
@@ -165,7 +165,7 @@ export default function TodayScreen() {
 
       <VitaminsCard pregnancyId={pregnancy.id} day={day} />
 
-      <NextAppointment pregnancyId={pregnancy.id} day={day} />
+      <NextAppointment pregnancyId={pregnancy.id} />
 
       <CheckinSheet type={sheet} units={units} pregnancyId={pregnancy.id} onClose={() => setSheet(null)} />
     </Screen>
@@ -343,10 +343,13 @@ function VitaminsCard({ pregnancyId, day }: { pregnancyId: string; day: string }
  * The next appointment that hasn't happened yet, linking to the calendar. It moves on by itself
  * once an appointment's time has passed. Nothing shows when none is booked.
  */
-function NextAppointment({ pregnancyId, day }: { pregnancyId: string; day: string }) {
+function NextAppointment({ pregnancyId }: { pregnancyId: string }) {
   const appointments = useAppointments(pregnancyId);
-  const now = useLocalTime();
-  const next = nextUp(appointments.data ?? [], day, now);
+  // Renders again as each minute starts. The day and the time are then read from the one clock
+  // reading, so the new time is never paired with the old day just after midnight.
+  useLocalTime();
+  const now = new Date();
+  const next = nextUp(appointments.data ?? [], localToday(now), localTime(now));
   if (!next) return null;
   const line = cardLine(next);
   return (

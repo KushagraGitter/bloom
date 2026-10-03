@@ -10,7 +10,7 @@
  * ahead, so a dose that is already ticked off (on either phone) or a medicine
  * that has finished does not nag. Water and kick counts repeat every day.
  */
-import { clock, type Appointment } from '@/lib/appointments';
+import { clock, localDate, type Appointment } from '@/lib/appointments';
 import type { ReminderKind } from '@/lib/onboarding';
 import { addDays, gestationalAge, localToday } from '@/lib/pregnancy';
 import { TIMES, doseKey, dueOn, inDisplayOrder, type Dose, type Medication, type TimeOfDay } from '@/lib/vitamins';
@@ -65,8 +65,9 @@ export type ReminderPlanInput = {
 
 /** A local date and clock time as a moment. */
 function atLocal(day: string, hour: number, minute: number): Date {
-  const [y, m, d] = day.split('-').map(Number);
-  return new Date(y, m - 1, d, hour, minute);
+  const at = localDate(day);
+  at.setHours(hour, minute);
+  return at;
 }
 
 /** "A", "A and B", "A, B and C", and past three "A, B, C and 2 more". */

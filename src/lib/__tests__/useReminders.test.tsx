@@ -348,6 +348,73 @@ describe('useReminders', () => {
       expect(keysOf(lastPlan()).some((k) => k.startsWith('water:'))).toBe(false);
     });
 
+    it('skips the plans that were overtaken while the phone was busy, and applies the newest', async () => {
+      let finishFirst!: () => void;
+      jest.mocked(replaceScheduled).mockImplementationOnce(() => new Promise<void>((resolve) => (finishFirst = resolve)));
+      const { client } = await setup();
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(1));
+
+      // Two more changes while the first is under way: water off, then kick counts off as well.
+      mockDb.rows.reminder_prefs = [{ kind: 'water', enabled: false }];
+      await refetch(client);
+      await settle();
+      mockDb.rows.reminder_prefs = [
+        { kind: 'water', enabled: false },
+        { kind: 'kicks', enabled: false },
+      ];
+      await refetch(client);
+      await settle();
+      expect(replaceScheduled).toHaveBeenCalledTimes(1);
+
+      await act(async () => finishFirst());
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(2));
+      await settle();
+      expect(replaceScheduled).toHaveBeenCalledTimes(2);
+      expect(keysOf(lastPlan()).some((k) => k.startsWith('water:'))).toBe(false);
+      expect(keysOf(lastPlan())).not.toContain('kicks');
+    });
+
+    it('lets a clear overtake a plan that was waiting for the phone', async () => {
+      let finishFirst!: () => void;
+      jest.mocked(replaceScheduled).mockImplementationOnce(() => new Promise<void>((resolve) => (finishFirst = resolve)));
+      const { client, rerender } = await setup();
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(1));
+
+      // A newer plan is waiting, and then she signs out.
+      mockDb.rows.reminder_prefs = [{ kind: 'water', enabled: false }];
+      await refetch(client);
+      await settle();
+      mockSession = { session: null, loading: false };
+      await rerender({});
+      await settle();
+
+      await act(async () => finishFirst());
+      await waitFor(() => expect(clearScheduled).toHaveBeenCalledTimes(1));
+      await settle();
+      expect(replaceScheduled).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not offer the newest plan again because an older one was turned down', async () => {
+      let refuseFirst!: () => void;
+      jest
+        .mocked(replaceScheduled)
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => (refuseFirst = () => reject(new Error('the phone said no')))));
+      const { client } = await setup();
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(1));
+
+      mockDb.rows.reminder_prefs = [{ kind: 'water', enabled: false }];
+      await refetch(client);
+      await settle();
+      await act(async () => refuseFirst());
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(2));
+
+      // Something unrelated changes; the newest plan is already on the phone.
+      mockDb.rows.med_doses = [doseRow('iron', '2026-09-26')];
+      await refetch(client);
+      await settle();
+      expect(replaceScheduled).toHaveBeenCalledTimes(2);
+    });
+
     it('offers the plan again the next time something changes after the phone turned it down', async () => {
       jest.mocked(replaceScheduled).mockRejectedValueOnce(new Error('the phone said no'));
       const { client } = await setup();
@@ -362,11 +429,28 @@ describe('useReminders', () => {
   });
 
   describe('when there is nobody to remind', () => {
-    it('clears the phone when nobody is signed in', async () => {
+    it('leaves the phone alone when the app opens with no sign-in, as it does when it starts offline', async () => {
       mockSession = { session: null, loading: false };
       await setup();
-      await waitFor(() => expect(clearScheduled).toHaveBeenCalledTimes(1));
+      await settle();
+      expect(clearScheduled).not.toHaveBeenCalled();
       expect(replaceScheduled).not.toHaveBeenCalled();
+    });
+
+    it('carries on once that sign-in comes back, and clears if she then signs out', async () => {
+      mockSession = { session: null, loading: false };
+      const { client, rerender } = await setup();
+      await settle();
+
+      mockSession = { session: { user: { id: 'me' } }, loading: false };
+      await rerender({});
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(1));
+      await loaded(client);
+      expect(clearScheduled).not.toHaveBeenCalled();
+
+      mockSession = { session: null, loading: false };
+      await rerender({});
+      await waitFor(() => expect(clearScheduled).toHaveBeenCalledTimes(1));
     });
 
     it('clears the phone when she signs out with the app open', async () => {
@@ -406,14 +490,19 @@ describe('useReminders', () => {
       expect(clearScheduled).not.toHaveBeenCalled();
     });
 
-    it('goes back to scheduling when she signs in again', async () => {
+    it('goes back to scheduling the same plan when she signs in again', async () => {
+      const { client, rerender } = await setup();
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(1));
+      await loaded(client);
+
       mockSession = { session: null, loading: false };
-      const { rerender } = await setup();
+      await rerender({});
       await waitFor(() => expect(clearScheduled).toHaveBeenCalledTimes(1));
 
       mockSession = { session: { user: { id: 'me' } }, loading: false };
       await rerender({});
-      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(replaceScheduled).toHaveBeenCalledTimes(2));
+      expect(keysOf(plans()[1])).toEqual(keysOf(plans()[0]));
     });
   });
 });

@@ -263,11 +263,10 @@ describe('Today', () => {
 describe('Today left open as the day goes by', () => {
   afterEach(() => jest.useRealTimers());
 
-  it('moves the next appointment on as each one starts, without leaving the screen', async () => {
-    // It is 8:50 on 3 October 2026. Only the date and the timeouts are faked,
-    // so the waits keep working while the test moves the clock on by hand.
+  /** Only the date and the timeouts are faked, so the waits keep working while a test moves the clock on by hand. */
+  function fakeClockAt(now: Date) {
     jest.useFakeTimers({
-      now: new Date(2026, 9, 3, 8, 50),
+      now,
       doNotFake: [
         'hrtime',
         'nextTick',
@@ -283,6 +282,11 @@ describe('Today left open as the day goes by', () => {
         'clearInterval',
       ],
     });
+  }
+
+  it('moves the next appointment on as each one starts, without leaving the screen', async () => {
+    // It is 8:50 on 3 October 2026.
+    fakeClockAt(new Date(2026, 9, 3, 8, 50));
     mockRows().appointments.push(
       { id: 'a3', pregnancy_id: 'p1', title: 'Growth scan', appt_date: '2026-10-03', appt_time: '09:00:00', place: null },
       { id: 'a4', pregnancy_id: 'p1', title: 'Dentist', appt_date: '2026-10-03', appt_time: '11:00:00', place: null },
@@ -303,5 +307,25 @@ describe('Today left open as the day goes by', () => {
     });
     expect(await screen.findByRole('link', { name: /^Next appointment: Glucose tolerance test, / })).toBeTruthy();
     expect(screen.queryByText('Dentist')).toBeNull();
+  });
+
+  it('does not bring the day’s last appointment back for a moment after midnight', async () => {
+    // 23:59:30 on 3 October 2026. The minute turns over at midnight and the day a second later;
+    // in between, the card must not pair the new time with the old day.
+    fakeClockAt(new Date(2026, 9, 3, 23, 59, 30));
+    mockRows().appointments.push(
+      { id: 'a5', pregnancy_id: 'p1', title: 'Late scan', appt_date: '2026-10-03', appt_time: '23:59:00', place: null },
+      { id: 'a6', pregnancy_id: 'p1', title: 'Morning clinic', appt_date: '2026-10-04', appt_time: '09:00:00', place: null },
+    );
+    await render(<TodayScreen />, { wrapper });
+    expect(await screen.findByRole('link', { name: /^Next appointment: Late scan, / })).toBeTruthy();
+
+    // 0.2 seconds past midnight: the minute has turned over, the day's own timer has not gone off.
+    // Nothing is waited for here, since the card has to be right as the minute turns, not a second on.
+    await act(async () => {
+      jest.advanceTimersByTime(30.2 * 1000);
+    });
+    expect(screen.getByRole('link', { name: /^Next appointment: Morning clinic, / })).toBeTruthy();
+    expect(screen.queryByText('Late scan')).toBeNull();
   });
 });

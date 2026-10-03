@@ -35,6 +35,9 @@ const permissions = (status: PermissionStatus, over: Record<string, unknown> = {
 const pending = (...identifiers: string[]) =>
   mock.getAllScheduledNotificationsAsync.mockResolvedValue(identifiers.map((identifier) => ({ identifier })) as never);
 
+/** The ids of what was handed to the phone to schedule, in order. */
+const scheduledIds = () => mock.scheduleNotificationAsync.mock.calls.map(([request]) => request.identifier);
+
 const daily = (key: string, hour: number): PlannedReminder => ({
   key,
   kind: 'water',
@@ -103,6 +106,14 @@ describe('on a phone', () => {
       expect(mock.requestPermissionsAsync).not.toHaveBeenCalled();
     });
 
+    it('reads Android 13’s “denied, but can still ask” as not asked yet', async () => {
+      // An app that has never asked is reported this way; only a no it cannot ask past is final.
+      mock.getPermissionsAsync.mockResolvedValue(permissions(PermissionStatus.DENIED, { canAskAgain: true }));
+      expect(await permissionState()).toBe('undetermined');
+      mock.getPermissionsAsync.mockResolvedValue(permissions(PermissionStatus.DENIED, { canAskAgain: false }));
+      expect(await permissionState()).toBe('denied');
+    });
+
     it('counts an iPhone’s quiet, provisional permission as allowed', async () => {
       mock.getPermissionsAsync.mockResolvedValue(
         permissions(PermissionStatus.DENIED, { ios: { status: Notifications.IosAuthorizationStatus.PROVISIONAL } }),
@@ -122,6 +133,18 @@ describe('on a phone', () => {
       expect(await askForPermission()).toBe('granted');
       mock.requestPermissionsAsync.mockResolvedValue(permissions(PermissionStatus.DENIED));
       expect(await askForPermission()).toBe('denied');
+    });
+
+    it('counts a no as denied, even where Android would let the prompt come up once more', async () => {
+      mock.requestPermissionsAsync.mockResolvedValue(permissions(PermissionStatus.DENIED, { canAskAgain: true }));
+      expect(await askForPermission()).toBe('denied');
+      mock.requestPermissionsAsync.mockResolvedValue(permissions(PermissionStatus.DENIED, { canAskAgain: false }));
+      expect(await askForPermission()).toBe('denied');
+    });
+
+    it('stays undetermined when the prompt did not get an answer', async () => {
+      mock.requestPermissionsAsync.mockResolvedValue(permissions(PermissionStatus.UNDETERMINED));
+      expect(await askForPermission()).toBe('undetermined');
     });
 
     it('is unavailable when the prompt fails', async () => {
@@ -208,6 +231,55 @@ describe('on a phone', () => {
     it('lets the failure through, so the caller can try again', async () => {
       mock.scheduleNotificationAsync.mockRejectedValueOnce(new Error('too many'));
       await expect(replaceScheduled([daily('water:9', 9)])).rejects.toThrow('too many');
+    });
+
+    it('goes on with the rest when the phone refuses one, and then lets the first refusal through', async () => {
+      mock.scheduleNotificationAsync
+        .mockRejectedValueOnce(new Error('first refused'))
+        .mockRejectedValueOnce(new Error('second refused'));
+      await expect(
+        replaceScheduled([daily('water:9', 9), daily('water:11', 11), daily('water:13', 13)]),
+      ).rejects.toThrow('first refused');
+      expect(scheduledIds()).toEqual(['water:9', 'water:11', 'water:13']);
+    });
+
+    it('goes on to schedule when the phone refuses to take an old one away', async () => {
+      pending('old:1', 'old:2');
+      mock.cancelScheduledNotificationAsync.mockRejectedValueOnce(new Error('cannot cancel'));
+      await expect(replaceScheduled([daily('water:9', 9)])).rejects.toThrow('cannot cancel');
+      expect(mock.cancelScheduledNotificationAsync).toHaveBeenCalledTimes(2);
+      expect(scheduledIds()).toEqual(['water:9']);
+    });
+
+    describe('with the clock moving', () => {
+      const start = new Date(2026, 9, 3, 7, 59, 0).getTime();
+      const clock = () => jest.spyOn(Date, 'now').mockReturnValue(start);
+
+      it('checks the time again for each one-off, since scheduling the others takes a while', async () => {
+        const now = clock();
+        // Scheduling the first takes a minute and a half, so the 8:00 one is already past.
+        mock.scheduleNotificationAsync.mockImplementationOnce(async () => {
+          now.mockReturnValue(start + 90 * 1000);
+          return 'scheduled';
+        });
+        await replaceScheduled([
+          daily('water:9', 9),
+          once('vitamins:2026-10-03:morning', new Date(2026, 9, 3, 8, 0, 0)),
+          once('vitamins:2026-10-03:afternoon', new Date(2026, 9, 3, 14, 0, 0)),
+        ]);
+        expect(scheduledIds()).toEqual(['water:9', 'vitamins:2026-10-03:afternoon']);
+      });
+
+      it('does not schedule a one-off that is only seconds away, and leaves it be if the phone has it', async () => {
+        clock();
+        pending('vitamins:2026-10-03:morning');
+        await replaceScheduled([
+          once('vitamins:2026-10-03:morning', new Date(start + 3 * 1000)),
+          once('vitamins:2026-10-03:afternoon', new Date(start + 10 * 1000)),
+        ]);
+        expect(scheduledIds()).toEqual(['vitamins:2026-10-03:afternoon']);
+        expect(mock.cancelScheduledNotificationAsync).not.toHaveBeenCalled();
+      });
     });
   });
 

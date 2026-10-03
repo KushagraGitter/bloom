@@ -95,7 +95,8 @@ export function monthWeeks(month: string): MonthCell[][] {
 // Words on screen, in the phone's own language and style
 // ---------------------------------------------------------------------------
 
-function localDate(day: string): Date {
+/** Midnight at the start of `day` (`YYYY-MM-DD`), in the phone's own time zone. */
+export function localDate(day: string): Date {
   const [y, m, d] = day.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
