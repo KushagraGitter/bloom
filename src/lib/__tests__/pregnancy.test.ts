@@ -25,6 +25,9 @@ describe('date helpers', () => {
   it('rejects malformed and impossible dates', () => {
     expect(() => addDays('2026-2-1', 1)).toThrow();
     expect(() => addDays('2026-02-30', 1)).toThrow();
+    expect(() => addDays('2026-13-01', 1)).toThrow();
+    expect(() => addDays('2026-00-01', 1)).toThrow();
+    expect(() => addDays('2026-01-00', 1)).toThrow();
   });
 
   it('formats the local date with zero padding', () => {

@@ -118,8 +118,9 @@ create table public.members (
 
 create index members_user_idx on public.members (user_id);
 
--- Exactly one owner per pregnancy.
+-- Exactly one owner and at most one partner per pregnancy.
 create unique index members_one_owner on public.members (pregnancy_id) where role = 'owner';
+create unique index members_one_partner on public.members (pregnancy_id) where role = 'partner';
 
 -- The creator of a pregnancy becomes its owner member.
 create function public.add_owner_member()
@@ -230,9 +231,24 @@ begin
     return null;
   end if;
 
+  -- Already a member (e.g. the owner tapping their own code): nothing to do.
+  if exists (
+    select 1 from public.members m
+    where m.pregnancy_id = v_invite.pregnancy_id and m.user_id = v_user
+  ) then
+    return v_invite.pregnancy_id;
+  end if;
+
+  -- Bloom is for two people: once a partner has joined, no one else can.
+  if exists (
+    select 1 from public.members m
+    where m.pregnancy_id = v_invite.pregnancy_id and m.role = 'partner'
+  ) then
+    return null;
+  end if;
+
   insert into public.members (pregnancy_id, user_id, role)
-  values (v_invite.pregnancy_id, v_user, 'partner')
-  on conflict (pregnancy_id, user_id) do nothing;
+  values (v_invite.pregnancy_id, v_user, 'partner');
 
   update public.invites
   set accepted_by = v_user, accepted_at = now()
@@ -263,6 +279,23 @@ create table public.readings (
 );
 
 create index readings_pregnancy_type_time_idx on public.readings (pregnancy_id, type, taken_at desc);
+
+-- Who logged a reading never changes, even when someone else edits the value.
+create function public.keep_reading_author()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.logged_by is distinct from old.logged_by then
+    raise exception 'logged_by cannot be changed' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger readings_keep_author
+  before update on public.readings
+  for each row execute function public.keep_reading_author();
 
 -- ---------------------------------------------------------------------------
 -- reminder_prefs: per person, so the partner can mute water reminders
@@ -400,6 +433,7 @@ revoke execute on function public.accept_invite(text) from public, anon;
 grant execute on function public.accept_invite(text) to authenticated;
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.add_owner_member() from public, anon, authenticated;
+revoke execute on function public.keep_reading_author() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Realtime: a kick or glass of water logged on one phone shows on the other

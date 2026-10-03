@@ -33,7 +33,15 @@ function toUtc(date: string): number {
   if (!m) throw new Error(`Expected a YYYY-MM-DD date, got "${date}"`);
   const [, y, mo, d] = m;
   const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d));
-  if (new Date(ms).getUTCDate() !== Number(d)) throw new Error(`Not a real date: "${date}"`);
+  // Date.UTC rolls overflow into the next month or year, so check every part.
+  const parsed = new Date(ms);
+  if (
+    parsed.getUTCFullYear() !== Number(y) ||
+    parsed.getUTCMonth() !== Number(mo) - 1 ||
+    parsed.getUTCDate() !== Number(d)
+  ) {
+    throw new Error(`Not a real date: "${date}"`);
+  }
   return ms;
 }
 

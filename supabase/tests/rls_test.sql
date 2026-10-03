@@ -136,6 +136,21 @@ exception when insufficient_privilege then
 end;
 $$;
 
+do $$
+begin
+  update public.readings set logged_by = '00000000-0000-0000-0000-00000000000b' where type = 'weight';
+  raise exception 'FAILED: partner rewrote who logged a reading';
+exception when insufficient_privilege then
+  raise notice 'ok: who logged a reading cannot be changed';
+end;
+$$;
+
+update public.readings set value_num = 64.4 where type = 'weight';
+select pg_temp.check(
+  (select value_num = 64.4 and logged_by = '00000000-0000-0000-0000-00000000000a' from public.readings where type = 'weight'),
+  'partner can correct a value, and the original author stays'
+);
+
 update public.pregnancies set nickname = 'Partner edit';
 select pg_temp.check((select nickname = 'Bean' from public.pregnancies), 'partner cannot edit her profile details');
 select pg_temp.check((select count(*) = 0 from public.invites), 'partner cannot see invites');
@@ -153,6 +168,21 @@ select pg_temp.check((select count(*) = 1 from public.reminder_prefs), 'owner se
 
 update public.reminder_prefs set enabled = true;
 select pg_temp.check((select enabled = false from public.reminder_prefs), 'owner cannot change the partner''s reminder settings');
+
+-- A second invite cannot bring in a third person.
+create temp table invite2 as
+with i as (insert into public.invites (pregnancy_id) select pregnancy_id from ids returning code)
+select code from i;
+select pg_temp.check(
+  (select public.accept_invite((select code from invite2)) = (select pregnancy_id from ids)),
+  'owner redeeming their own code changes nothing'
+);
+select pg_temp.check((select count(*) = 2 from public.members), 'still two members');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+select pg_temp.check((select public.accept_invite((select code from invite2)) is null), 'a second partner cannot join');
+select pg_temp.check((select count(*) = 0 from public.pregnancies), 'would-be second partner sees nothing');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 
 update public.pregnancies set nickname = 'Sprout';
 select pg_temp.check((select nickname = 'Sprout' from public.pregnancies), 'owner can edit the pregnancy');
@@ -172,7 +202,10 @@ select pg_temp.check((select count(*) = 0 from public.pregnancies), 'stranger st
 -- Code guessing is rate-limited ----------------------------------------------
 -- Each guess is its own statement, as it would be from the app, so earlier
 -- attempts stay recorded.
-select public.accept_invite(lpad(n::text, 6, '0')) from generate_series(1, 8) n \g /dev/null
+reset role;
+delete from public.invite_attempts;
+set role authenticated;
+select public.accept_invite(lpad(n::text, 6, '0')) from generate_series(1, 10) n \g /dev/null
 
 do $$
 begin
