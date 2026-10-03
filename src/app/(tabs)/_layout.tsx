@@ -1,9 +1,13 @@
 import { Tabs } from 'expo-router/js-tabs';
 
 import { TabBar } from '@/components';
+import { useMembership, useRealtimeSync } from '@/lib/data';
 import { colors } from '@/theme/tokens';
 
 export default function TabsLayout() {
+  const membership = useMembership();
+  useRealtimeSync(membership.data?.pregnancy.id);
+
   return (
     <Tabs
       tabBar={(props) => <TabBar {...props} />}

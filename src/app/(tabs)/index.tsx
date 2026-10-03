@@ -2,18 +2,21 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { BottomSheet, Button, Card, Chip, Screen, Text, TextField } from '@/components';
+import { BottomSheet, Button, Card, CheckIcon, Chip, Screen, Text, TextField } from '@/components';
 import {
+  useDoses,
   useLatestCheckins,
   useLocalToday,
   useLogCheckin,
+  useMedications,
   useMembers,
   useMembership,
   useProfile,
-  useReadingsRealtime,
   useTally,
   useTodayReadings,
+  useToggleDose,
 } from '@/lib/data';
+import { shortDay, timeOf } from '@/lib/format';
 import { gestationalAge } from '@/lib/pregnancy';
 import { formatDate, initialOf } from '@/lib/profile';
 import {
@@ -32,15 +35,11 @@ import {
   type Units,
 } from '@/lib/readings';
 import { useSession } from '@/lib/session';
+import { TIMES, doseKey, doseLine, dueOn, indexDoses, inDisplayOrder, tickedBy } from '@/lib/vitamins';
 import { border, colors, fonts, radius, touchTarget } from '@/theme/tokens';
 
-function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-function shortDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-}
+/** Today's list stays short; the Vitamins tab has the rest. */
+const VITAMINS_SHOWN = 4;
 
 export default function TodayScreen() {
   const { session } = useSession();
@@ -53,7 +52,6 @@ export default function TodayScreen() {
   const today = useTodayReadings(pregnancyId, day);
   const latest = useLatestCheckins(pregnancyId);
   const members = useMembers(pregnancyId);
-  useReadingsRealtime(pregnancyId);
 
   const [sheet, setSheet] = useState<CheckinType | null>(null);
 
@@ -160,6 +158,8 @@ export default function TodayScreen() {
 
       <Tallies pregnancyId={pregnancy.id} day={day} rows={rows} />
 
+      <VitaminsCard pregnancyId={pregnancy.id} day={day} />
+
       <CheckinSheet type={sheet} units={units} pregnancyId={pregnancy.id} onClose={() => setSheet(null)} />
     </Screen>
   );
@@ -217,6 +217,73 @@ function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string;
         </Text>
       )}
     </View>
+  );
+}
+
+function VitaminsCard({ pregnancyId, day }: { pregnancyId: string; day: string }) {
+  const { session } = useSession();
+  const meds = useMedications(pregnancyId);
+  const doses = useDoses(pregnancyId);
+  const members = useMembers(pregnancyId);
+  const toggle = useToggleDose(pregnancyId);
+
+  const due = inDisplayOrder(dueOn(meds.data ?? [], day));
+  const index = indexDoses(doses.data ?? []);
+  const shown = due.slice(0, VITAMINS_SHOWN);
+
+  return (
+    <Card size="panel" style={styles.vitCard}>
+      <View style={styles.vitHeader}>
+        <Text variant="title" accessibilityRole="header">
+          Vitamins
+        </Text>
+        <Pressable accessibilityRole="link" hitSlop={8} onPress={() => router.navigate('/vitamins')}>
+          <Text style={styles.seeAll}>{meds.data?.length === 0 ? 'Add' : 'See all'}</Text>
+        </Pressable>
+      </View>
+      {meds.isSuccess && due.length === 0 && (
+        <Text muted>{meds.data.length === 0 ? 'Add the vitamins you take and tick them off here.' : 'Nothing due today.'}</Text>
+      )}
+      {shown.map((med) => {
+        const dose = index.get(doseKey(med.id, day));
+        const who = dose ? tickedBy(dose, session?.user.id, members.data) : null;
+        const when = `${TIMES.find((t) => t.key === med.time_of_day)?.label} · ${doseLine(med)}`;
+        return (
+          <Pressable
+            key={med.id}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: !!dose }}
+            accessibilityLabel={`${med.name}, ${when}`}
+            onPress={() => toggle.mutate({ medicationId: med.id, day, taken: !dose })}
+            style={styles.vitRow}>
+            <View style={[styles.box, !!dose && styles.boxOn]}>{dose && <CheckIcon />}</View>
+            <View style={styles.vitText}>
+              <Text style={styles.vitName} numberOfLines={1}>
+                {med.name}
+              </Text>
+              <Text muted style={styles.vitWhen} numberOfLines={1}>
+                {when}
+              </Text>
+              {dose && who && (
+                <Text variant="caption">
+                  {who} marked it taken · {timeOf(dose.taken_at)}
+                </Text>
+              )}
+            </View>
+          </Pressable>
+        );
+      })}
+      {due.length > shown.length && (
+        <Text muted style={styles.vitWhen}>
+          +{due.length - shown.length} more on the Vitamins tab
+        </Text>
+      )}
+      {toggle.isError && (
+        <Text muted accessibilityRole="alert">
+          Couldn&apos;t save that tick. Check your connection and try again.
+        </Text>
+      )}
+    </Card>
   );
 }
 
@@ -372,4 +439,22 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   fieldRow: { flexDirection: 'row' },
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
+  vitCard: { padding: 16, gap: 10 },
+  vitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  seeAll: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purple },
+  vitRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingVertical: 4 },
+  box: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  boxOn: { backgroundColor: colors.mint },
+  vitText: { flex: 1 },
+  vitName: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.ink },
+  vitWhen: { fontSize: 13 },
 });

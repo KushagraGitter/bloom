@@ -18,7 +18,7 @@ gets a login that sees everything and can log on her behalf.
 src/app/            routes (each design artboard becomes one)
   (auth)/           welcome and Google sign-in
   onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
-  (tabs)/           Today (check-ins, kicks, water), Meals, Vitamins, Reports, Progress
+  (tabs)/           Today (check-ins, kicks, water, vitamins) and Vitamins; Meals, Reports and Progress are placeholders
   profile.tsx       edit details, reminders, units, partner invite code
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen
@@ -57,6 +57,8 @@ these on every pull request.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. Open the SQL editor and run each file in `supabase/migrations/` in order.
+   Later pull requests add new files there: run only the ones you haven't run yet,
+   oldest first.
 3. Copy the project URL and publishable (or anon) key into `.env.local`.
 4. Google sign-in: create a Web OAuth client in Google Cloud and enter its
    client ID and secret under Authentication → Providers → Google. Add
@@ -68,7 +70,7 @@ these on every pull request.
 The app signs in through Supabase's hosted Google page in an in-app browser,
 so it needs no Google IDs itself and works in Expo Go.
 
-## Data model (phase 1)
+## Data model
 
 Everything hangs off one `pregnancies` row. The owner and an invited partner are
 rows in `members`, and every RLS policy checks membership, so a third account
@@ -82,5 +84,11 @@ sees nothing.
 | `invites`        | 6-digit codes, valid 48 hours, single use, one unused code per pregnancy; made by `new_invite(pregnancy)`, redeemed through `accept_invite(code)` |
 | `readings`       | Weight, BP, sugar, sleep, kicks and water check-ins, stamped with who logged them |
 | `reminder_prefs` | Per-person reminder settings |
+| `medications`    | What she takes: name, dose, morning / afternoon / evening, and the first and last day it is due |
+| `med_doses`      | One row per medicine per day it was ticked off, stamped with who ticked it; the streak is worked out from these |
 
 Invite redemption is rate-limited to 10 attempts an hour per account.
+
+Readings, medications and doses are in Supabase's Realtime publication, so a tick
+or a kick on one phone shows up on the other. The app listens on one channel per
+pregnancy (`useRealtimeSync`, mounted once in the tabs layout).

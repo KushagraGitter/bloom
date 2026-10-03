@@ -1,4 +1,4 @@
--- Row Level Security checks for the phase 1 tables.
+-- Row Level Security checks for the phase 1 and 2 tables.
 -- Three accounts: the owner, her partner, and a stranger who must see nothing.
 -- Run with supabase/tests/run.sh.
 
@@ -219,6 +219,109 @@ exception when insufficient_privilege then
   raise notice 'ok: invites are only made through new_invite()';
 end;
 $$;
+
+-- Vitamins ---------------------------------------------------------------------
+-- Either of them can add medicines and tick doses; a stranger sees and changes nothing.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+
+-- Runs a statement and checks it fails with the given SQLSTATE.
+create function pg_temp.rejects(stmt text, expected text, what text) returns void language plpgsql as $$
+begin
+  execute stmt;
+  raise exception 'FAILED: % was accepted', what;
+exception when others then
+  if sqlstate = expected then
+    raise notice 'ok: % is rejected', what;
+  else
+    raise;
+  end if;
+end;
+$$;
+
+create temp table med as
+with m as (
+  insert into public.medications (pregnancy_id, name, dose, time_of_day, start_date)
+  select pregnancy_id, 'Iron', '1 tablet after lunch', 'afternoon', '2026-10-01' from ids
+  returning id
+)
+select id as medication_id from m;
+
+select pg_temp.check((select count(*) = 1 from public.medications), 'owner adds a medication');
+select pg_temp.rejects(
+  $q$insert into public.medications (pregnancy_id, name, start_date, end_date) select pregnancy_id, 'Calcium', '2026-10-01', '2026-09-30' from ids$q$,
+  '23514', 'a medication ending before it starts');
+select pg_temp.rejects(
+  $q$insert into public.medications (pregnancy_id, name) select pregnancy_id, '  ' from ids$q$,
+  '23514', 'a blank medication name');
+select pg_temp.rejects(
+  $q$insert into public.medications (pregnancy_id, name, time_of_day) select pregnancy_id, 'Calcium', 'midnight' from ids$q$,
+  '23514', 'an unknown time of day');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+select pg_temp.check((select count(*) = 1 from public.medications), 'partner sees her medications');
+
+insert into public.medications (pregnancy_id, name) select pregnancy_id, 'Folic acid' from ids;
+select pg_temp.check((select count(*) = 2 from public.medications), 'partner can add a medication');
+
+insert into public.med_doses (medication_id, pregnancy_id, day)
+select medication_id, (select pregnancy_id from ids), '2026-10-02' from med;
+select pg_temp.check((select logged_by = auth.uid() from public.med_doses), 'a dose is stamped with who ticked it');
+select pg_temp.rejects(
+  $q$insert into public.med_doses (medication_id, pregnancy_id, day) select medication_id, (select pregnancy_id from ids), '2026-10-02' from med$q$,
+  '23505', 'a second dose for the same day');
+select pg_temp.rejects(
+  $q$insert into public.med_doses (medication_id, pregnancy_id, day, logged_by) select medication_id, (select pregnancy_id from ids), '2026-10-03', '00000000-0000-0000-0000-00000000000a' from med$q$,
+  '42501', 'a dose ticked as someone else');
+
+-- What the app sends when a second phone ticks the same dose.
+insert into public.med_doses (medication_id, pregnancy_id, day)
+select medication_id, (select pregnancy_id from ids), '2026-10-02' from med
+on conflict (medication_id, day) do nothing;
+select pg_temp.check((select count(*) = 1 from public.med_doses), 'ticking the same dose twice leaves one row');
+
+update public.med_doses set day = '2026-10-09';
+select pg_temp.check((select day = '2026-10-02' from public.med_doses), 'a dose cannot be edited, only taken away');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.check((select count(*) = 1 from public.med_doses), 'owner sees the dose her partner ticked');
+
+update public.medications set dose = '2 tablets' where name = 'Folic acid';
+select pg_temp.check((select dose = '2 tablets' from public.medications where name = 'Folic acid'), 'either of them can edit a medication');
+
+delete from public.med_doses where day = '2026-10-02';
+select pg_temp.check((select count(*) = 0 from public.med_doses), 'a dose can be un-ticked');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+select pg_temp.check((select count(*) = 0 from public.medications), 'stranger sees no medications');
+select pg_temp.check((select count(*) = 0 from public.med_doses), 'stranger sees no doses');
+select pg_temp.rejects(
+  $q$insert into public.medications (pregnancy_id, name) select pregnancy_id, 'Sneaky' from ids$q$,
+  '42501', 'a stranger adding a medication');
+select pg_temp.rejects(
+  $q$insert into public.med_doses (medication_id, pregnancy_id, day) select medication_id, (select pregnancy_id from ids), '2026-10-02' from med$q$,
+  '42501', 'a stranger ticking a dose');
+update public.medications set name = 'hacked';
+delete from public.medications;
+
+-- Even with a pregnancy of their own, a dose cannot point at her medication.
+create temp table strangers_pregnancy as
+with p as (insert into public.pregnancies (lmp_date) values ('2026-06-01') returning id)
+select id as pregnancy_id from p;
+select pg_temp.rejects(
+  $q$insert into public.med_doses (medication_id, pregnancy_id, day) select medication_id, (select pregnancy_id from strangers_pregnancy), '2026-10-02' from med$q$,
+  '23503', 'a dose for someone else''s medication');
+delete from public.pregnancies where id = (select pregnancy_id from strangers_pregnancy);
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.check(
+  (select count(*) = 2 and bool_and(name <> 'hacked') from public.medications),
+  'a stranger cannot change or delete her medications');
+
+insert into public.med_doses (medication_id, pregnancy_id, day)
+select medication_id, (select pregnancy_id from ids), '2026-10-02' from med;
+delete from public.medications where id = (select medication_id from med);
+select pg_temp.check((select count(*) = 0 from public.med_doses), 'removing a medication removes its doses');
+select pg_temp.check((select count(*) = 1 from public.medications), 'the owner can remove a medication');
 
 -- Expired invites -------------------------------------------------------------
 reset role;
