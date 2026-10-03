@@ -25,6 +25,7 @@ src/app/            routes (each design artboard becomes one)
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
 src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths
+  vault/            on-phone record store, encryption, household key and encrypted sync (not wired to screens yet)
 supabase/
   migrations/       SQL schema and RLS policies
   tests/            RLS checks against a throwaway Postgres
@@ -94,3 +95,21 @@ Invite redemption is rate-limited to 10 attempts an hour per account.
 Readings, medications, doses and appointments are in Supabase's Realtime publication,
 so a tick, a kick or a booking on one phone shows up on the other. The app listens on one channel per
 pregnancy (`useRealtimeSync`, mounted once in the tabs layout).
+
+## Health data on the phone (in progress)
+
+Health data is moving off Supabase's readable tables and onto the phones
+(see the plan doc, option B). The pieces in `src/lib/vault/`:
+
+- `localStore.ts`: every record lives in SQLite on the phone (`expo-sqlite`), and that is what screens will read.
+- `crypto.ts`: records are sealed with XChaCha20-Poly1305 under a 32-byte household key, bound to their household and id.
+- `keys.ts`: the key sits in the phone's keychain (`expo-secure-store`) and can be written out as a recovery phrase with a checksum.
+- `sync.ts` and `useVaultSync.ts`: phones upload sealed records to `vault_records` and pull the other phone's. The newest edit of a record wins, deletes travel as sealed tombstones, and a realtime change on `vault_records` tells the other phone to pull.
+
+`vault_records` holds only the household id, the key version, a nonce, the
+sealed blob and timestamps. It has no delete policy, and its trigger assigns the
+pull order (`seq`) and drops an update older than the stored one.
+
+Not done yet: switching each screen from the Supabase tables to the local store,
+giving the partner's phone the key by QR code, the recovery screens, key rotation,
+and removing the old readable tables.

@@ -392,6 +392,64 @@ delete from public.pregnancies where id = (select pregnancy_id from other_pregna
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 
+-- Encrypted records -------------------------------------------------------------
+-- The server only ever holds sealed blobs; these checks are about who may
+-- write them and which edit wins.
+insert into public.vault_records (id, pregnancy_id, nonce, ciphertext, client_updated_at, seq)
+select '10000000-0000-0000-0000-000000000001', pregnancy_id, repeat('n', 32), repeat('c', 40), '2026-10-04 10:00+00', 999999 from ids;
+select pg_temp.check((select count(*) = 1 from public.vault_records), 'owner stores an encrypted record');
+select pg_temp.check((select seq < 999999 from public.vault_records), 'the server picks the seq, not the phone');
+
+select pg_temp.rejects(
+  $q$insert into public.vault_records (id, pregnancy_id, nonce, ciphertext, client_updated_at) select gen_random_uuid(), pregnancy_id, 'short', repeat('c', 40), now() from ids$q$,
+  '23514', 'a record with a malformed nonce');
+
+create temp table first_seq as select seq from public.vault_records;
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+select pg_temp.check((select count(*) = 1 from public.vault_records), 'partner sees her encrypted records');
+
+insert into public.vault_records (id, pregnancy_id, nonce, ciphertext, client_updated_at)
+select '10000000-0000-0000-0000-000000000001', pregnancy_id, repeat('m', 32), repeat('d', 40), '2026-10-04 11:00+00' from ids
+on conflict (id) do update set nonce = excluded.nonce, ciphertext = excluded.ciphertext, client_updated_at = excluded.client_updated_at;
+select pg_temp.check(
+  (select ciphertext = repeat('d', 40) and seq > (select seq from first_seq) from public.vault_records),
+  'a newer edit replaces the record and gets a new seq');
+
+insert into public.vault_records (id, pregnancy_id, nonce, ciphertext, client_updated_at)
+select '10000000-0000-0000-0000-000000000001', pregnancy_id, repeat('o', 32), repeat('e', 40), '2026-10-04 10:30+00' from ids
+on conflict (id) do update set nonce = excluded.nonce, ciphertext = excluded.ciphertext, client_updated_at = excluded.client_updated_at;
+select pg_temp.check(
+  (select ciphertext = repeat('d', 40) from public.vault_records),
+  'an older edit from a phone that was offline does not overwrite a newer one');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+create temp table vault_other as
+with p as (insert into public.pregnancies (lmp_date) values ('2026-06-01') returning id)
+select id as pregnancy_id from p;
+
+select pg_temp.check((select count(*) = 0 from public.vault_records), 'stranger sees no encrypted records');
+select pg_temp.rejects(
+  $q$insert into public.vault_records (id, pregnancy_id, nonce, ciphertext, client_updated_at) select gen_random_uuid(), pregnancy_id, repeat('n', 32), repeat('c', 40), now() from ids$q$,
+  '42501', 'a stranger storing a record in her household');
+update public.vault_records set ciphertext = repeat('x', 40), client_updated_at = '2030-01-01';
+delete from public.vault_records;
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.check(
+  (select count(*) = 1 and bool_and(ciphertext = repeat('d', 40)) from public.vault_records),
+  'a stranger cannot change or delete her encrypted records');
+delete from public.vault_records;
+select pg_temp.check((select count(*) = 1 from public.vault_records), 'even members cannot delete; deletes sync as tombstones');
+select pg_temp.rejects(
+  $q$update public.vault_records set pregnancy_id = (select pregnancy_id from vault_other), client_updated_at = '2030-01-01'$q$,
+  '42501', 'moving a record into another pregnancy');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+delete from public.pregnancies where id = (select pregnancy_id from vault_other);
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+
 -- Expired invites -------------------------------------------------------------
 reset role;
 delete from public.invites where accepted_by is null;
