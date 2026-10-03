@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 
@@ -257,5 +257,51 @@ describe('Today', () => {
 
     expect(screen.queryByText('Next appointment')).toBeNull();
     expect(screen.queryByText('Booking visit')).toBeNull();
+  });
+});
+
+describe('Today left open as the day goes by', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('moves the next appointment on as each one starts, without leaving the screen', async () => {
+    // It is 8:50 on 3 October 2026. Only the date and the timeouts are faked,
+    // so the waits keep working while the test moves the clock on by hand.
+    jest.useFakeTimers({
+      now: new Date(2026, 9, 3, 8, 50),
+      doNotFake: [
+        'hrtime',
+        'nextTick',
+        'performance',
+        'queueMicrotask',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'requestIdleCallback',
+        'cancelIdleCallback',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+      ],
+    });
+    mockRows().appointments.push(
+      { id: 'a3', pregnancy_id: 'p1', title: 'Growth scan', appt_date: '2026-10-03', appt_time: '09:00:00', place: null },
+      { id: 'a4', pregnancy_id: 'p1', title: 'Dentist', appt_date: '2026-10-03', appt_time: '11:00:00', place: null },
+    );
+    await render(<TodayScreen />, { wrapper });
+    expect(await screen.findByRole('link', { name: /^Next appointment: Growth scan, / })).toBeTruthy();
+
+    // Just after 9:01: the 9:00 one has started, so the 11:00 one is next.
+    await act(async () => {
+      jest.advanceTimersByTime((11 * 60 + 1) * 1000);
+    });
+    expect(await screen.findByRole('link', { name: /^Next appointment: Dentist, / })).toBeTruthy();
+    expect(screen.queryByText('Growth scan')).toBeNull();
+
+    // Just after 11:01: nothing is left today, so it looks ahead to the next day booked.
+    await act(async () => {
+      jest.advanceTimersByTime(120 * 60 * 1000);
+    });
+    expect(await screen.findByRole('link', { name: /^Next appointment: Glucose tolerance test, / })).toBeTruthy();
+    expect(screen.queryByText('Dentist')).toBeNull();
   });
 });

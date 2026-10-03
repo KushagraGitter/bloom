@@ -3,11 +3,12 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BottomSheet, Button, CalendarIcon, Card, CheckIcon, Chip, Screen, SmileIcon, Text, TextField, TimerIcon } from '@/components';
-import { cardLine, dayLong, dayNumber, localTime, monthAbbr, nextUp } from '@/lib/appointments';
+import { cardLine, dayLong, dayNumber, monthAbbr, nextUp } from '@/lib/appointments';
 import {
   useAppointments,
   useDoses,
   useLatestCheckins,
+  useLocalTime,
   useLocalToday,
   useLogCheckin,
   useMedications,
@@ -338,10 +339,14 @@ function VitaminsCard({ pregnancyId, day }: { pregnancyId: string; day: string }
   );
 }
 
-/** The next appointment that hasn't happened yet, linking to the calendar. Nothing shows when none is booked. */
+/**
+ * The next appointment that hasn't happened yet, linking to the calendar. It moves on by itself
+ * once an appointment's time has passed. Nothing shows when none is booked.
+ */
 function NextAppointment({ pregnancyId, day }: { pregnancyId: string; day: string }) {
   const appointments = useAppointments(pregnancyId);
-  const next = nextUp(appointments.data ?? [], day, localTime());
+  const now = useLocalTime();
+  const next = nextUp(appointments.data ?? [], day, now);
   if (!next) return null;
   const line = cardLine(next);
   return (
