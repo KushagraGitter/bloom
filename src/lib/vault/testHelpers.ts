@@ -2,7 +2,7 @@
 // and an in-memory server that behaves like `vault_records` (server-assigned
 // seq, newest edit wins).
 
-import type { SqlDatabase } from '@/lib/vault/localStore';
+import { createLocalStoreAsync, type SqlDatabase } from '@/lib/vault/localStore';
 import type { RemoteRecord, VaultRemote } from '@/lib/vault/sync';
 
 export function memoryDb(): SqlDatabase {
@@ -55,4 +55,27 @@ export function fakeServer() {
 /** Bytes as one character each, to search sealed data for leaked text. */
 export function latin1(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => String.fromCharCode(b)).join('');
+}
+
+/** A vault that is ready on this phone, backed by an in-memory store, for screen and hook tests. */
+export async function readyVault(role: 'owner' | 'partner' = 'owner') {
+  const store = await createLocalStoreAsync(memoryDb());
+  const syncs: number[] = [];
+  const vault = {
+    state: 'ready' as const,
+    role,
+    householdKey: { version: 1, bytes: new Uint8Array(32) },
+    store,
+    sync: {
+      syncing: false,
+      error: null,
+      lastSyncedAt: new Date(0),
+      requestSync: async () => {
+        syncs.push(Date.now());
+      },
+    },
+    adoptKey: async () => true,
+    retry: () => {},
+  };
+  return { vault, store, syncs };
 }

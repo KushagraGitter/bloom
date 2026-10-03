@@ -1,14 +1,18 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
 
 import TodayScreen from '@/app/(tabs)/index';
 import { clock } from '@/lib/appointments';
+import { copyOldData } from '@/lib/copyOldData';
+import { doseId, readingKind, tallyKind } from '@/lib/data';
 import { addDays, localToday } from '@/lib/pregnancy';
-import { supabase } from '@/lib/supabase';
+import type { LocalStore } from '@/lib/vault/localStore';
+import { readyVault } from '@/lib/vault/testHelpers';
+import { vaultWrapper } from '@/lib/vault/testWrapper';
+import type { Vault } from '@/lib/vault/VaultProvider';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), navigate: jest.fn() } }));
+jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));
 
 jest.mock('@/lib/session', () => ({
   useSession: () => ({ session: { user: { id: 'me', email: 'ananya@example.com' } }, loading: false }),
@@ -67,81 +71,53 @@ function mockRows() {
   return mockState;
 }
 
+// Only who is in the household comes from the server; health data is in the vault.
 jest.mock('@/lib/supabase', () => {
-  const inserts: unknown[] = [];
-  const upserts: unknown[] = [];
-  const deletes: unknown[] = [];
   const from = (table: string) => {
     const rows = mockRows();
     const filters: Record<string, unknown> = {};
-    let insertRow: unknown = null;
-    let deleting = false;
-    const result = (single: boolean) => {
-      if (deleting) {
-        deletes.push({ table, filters: { ...filters } });
-        rows.med_doses = rows.med_doses.filter((r) => !Object.entries(filters).every(([k, v]) => r[k] === v));
-        return { data: null, error: null };
-      }
-      if (insertRow) return { data: null, error: null };
+    const result = () => {
       if (table === 'members') return { data: filters.user_id ? rows.membership : rows.members, error: null };
       if (table === 'profiles') return { data: rows.profile, error: null };
-      if (table === 'medications') return { data: rows.medications, error: null };
-      if (table === 'med_doses') return { data: rows.med_doses, error: null };
-      if (table === 'appointments') return { data: rows.appointments, error: null };
-      if (table === 'readings') {
-        if (single) return { data: rows.latest[filters.type as string] ?? null, error: null };
-        return { data: rows.today, error: null };
-      }
       return { data: null, error: null };
     };
     const q = {
       select: () => q,
       eq: (col: string, v: unknown) => ((filters[col] = v), q),
-      gte: () => q,
       order: () => q,
       limit: () => q,
-      insert: (row: Record<string, unknown>) => {
-        insertRow = row;
-        inserts.push(row);
-        rows.today.push({ id: `new-${inserts.length}`, value_num2: null, value_text: null, taken_at: new Date().toISOString(), logged_by: 'me', ...row });
-        return q;
-      },
-      upsert: (row: Record<string, unknown>, opts: unknown) => {
-        insertRow = row;
-        upserts.push({ row, opts });
-        rows.med_doses.unshift({ taken_at: new Date().toISOString(), logged_by: 'me', ...row });
-        return q;
-      },
-      delete: () => {
-        deleting = true;
-        return q;
-      },
-      maybeSingle: async () => result(true),
-      then: (resolve: (v: unknown) => void) => resolve(result(false)),
+      maybeSingle: async () => result(),
+      then: (resolve: (v: unknown) => void) => resolve(result()),
     };
     return q;
   };
-  const channel = { on: () => channel, subscribe: () => channel };
-  return {
-    isSupabaseConfigured: true,
-    supabase: { from, channel: () => channel, removeChannel: jest.fn(), __inserts: inserts, __upserts: upserts, __deletes: deletes },
-  };
+  return { isSupabaseConfigured: true, supabase: { from } };
 });
 
-function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { gcTime: Infinity } },
-  });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
+let vault: Vault;
+let store: LocalStore;
 
-beforeEach(() => {
+beforeEach(async () => {
   mockState = undefined;
+  ({ vault, store } = await readyVault());
 });
+
+/** Puts the test's rows into this phone's vault, then shows Today. */
+async function show() {
+  const rows = mockRows();
+  await copyOldData(store, 'p1', {
+    pregnancy: null,
+    readings: [...rows.today, ...Object.values(rows.latest)] as Record<string, unknown>[],
+    medications: rows.medications,
+    doses: rows.med_doses,
+    appointments: rows.appointments,
+  });
+  return render(<TodayScreen />, { wrapper: vaultWrapper(vault) });
+}
 
 describe('Today', () => {
   it('shows today’s check-ins, who logged them, and the tallies', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
 
     expect(await screen.findByText('Hi, Ananya')).toBeTruthy();
     expect(await screen.findByText('64.2 kg')).toBeTruthy();
@@ -154,16 +130,18 @@ describe('Today', () => {
   });
 
   it('counts a kick straight away and saves it', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
     await screen.findByLabelText('1 kicks today');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Tap a kick' }));
     expect(await screen.findByLabelText('2 kicks today')).toBeTruthy();
-    expect((supabase as unknown as { __inserts: unknown[] }).__inserts).toContainEqual({ pregnancy_id: 'p1', type: 'kicks', value_num: 1 });
+    const kicks = await store.list('p1', tallyKind('kicks', localToday()));
+    expect(kicks.map((k) => k.data)).toContainEqual(expect.objectContaining({ type: 'kicks', value_num: 1, logged_by: 'me' }));
+    expect(kicks.filter((k) => k.dirty)).toHaveLength(2);
   });
 
   it('checks a typed reading before saving it', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('button', { name: /^Blood pressure/ }));
     await fireEvent.changeText(screen.getByLabelText('Systolic / diastolic'), '76/114');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
@@ -171,17 +149,15 @@ describe('Today', () => {
 
     await fireEvent.changeText(screen.getByLabelText('Systolic / diastolic'), '114/76');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-    expect((supabase as unknown as { __inserts: unknown[] }).__inserts).toContainEqual({
-      pregnancy_id: 'p1',
-      type: 'bp',
-      value_num: 114,
-      value_num2: 76,
-      value_text: null,
-    });
+    await waitFor(async () =>
+      expect((await store.list('p1', readingKind('bp'))).map((r) => r.data)).toContainEqual(
+        expect.objectContaining({ type: 'bp', value_num: 114, value_num2: 76, value_text: null, logged_by: 'me' }),
+      ),
+    );
   });
 
   it('lists the vitamins due today, shows who ticked, and ticks one off', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
     expect(await screen.findByText('Prenatal multivitamin')).toBeTruthy();
     expect(screen.getByText('Morning · 1 tablet · with breakfast')).toBeTruthy();
     expect(screen.getByText('Afternoon · As prescribed')).toBeTruthy();
@@ -190,25 +166,23 @@ describe('Today', () => {
 
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Iron, Afternoon · As prescribed', checked: false }));
     expect(await screen.findByRole('checkbox', { name: 'Iron, Afternoon · As prescribed', checked: true })).toBeTruthy();
-    expect((supabase as unknown as { __upserts: unknown[] }).__upserts).toContainEqual({
-      row: { pregnancy_id: 'p1', medication_id: 'm2', day: localToday() },
-      opts: { onConflict: 'medication_id,day', ignoreDuplicates: true },
+    expect(await store.get(doseId('m2', localToday()))).toMatchObject({
+      kind: 'dose',
+      deleted: false,
+      data: { medication_id: 'm2', day: localToday(), logged_by: 'me' },
     });
   });
 
   it('un-ticks a vitamin', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('checkbox', { name: /^Prenatal multivitamin/, checked: true }));
 
     expect(await screen.findByRole('checkbox', { name: /^Prenatal multivitamin/, checked: false })).toBeTruthy();
-    expect((supabase as unknown as { __deletes: unknown[] }).__deletes).toContainEqual({
-      table: 'med_doses',
-      filters: { medication_id: 'm1', day: localToday() },
-    });
+    expect(await store.get(doseId('m1', localToday()))).toMatchObject({ deleted: true, dirty: true });
   });
 
   it('links to the Vitamins tab', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('link', { name: 'See all' }));
     expect(router.navigate).toHaveBeenCalledWith('/vitamins');
   });
@@ -216,14 +190,14 @@ describe('Today', () => {
   it('suggests adding vitamins when there are none', async () => {
     mockRows().medications = [];
     mockRows().med_doses = [];
-    await render(<TodayScreen />, { wrapper });
+    await show();
 
     expect(await screen.findByText('Add the vitamins you take and tick them off here.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Add' })).toBeTruthy();
   });
 
   it('lists the tools, opens appointments, and marks the ones that are not built yet', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('button', { name: 'Appointments' }));
     expect(router.push).toHaveBeenCalledWith('/appointments');
 
@@ -235,7 +209,7 @@ describe('Today', () => {
   });
 
   it('shows the next appointment that has not happened yet, and opens the calendar from it', async () => {
-    await render(<TodayScreen />, { wrapper });
+    await show();
 
     const card = await screen.findByRole('link', { name: /^Next appointment: Glucose tolerance test, / });
     expect(screen.getByText('Next appointment')).toBeTruthy();
@@ -251,12 +225,25 @@ describe('Today', () => {
 
   it('shows no appointment card when nothing is coming up', async () => {
     mockRows().appointments = mockRows().appointments.filter((a) => a.id === 'a0');
-    await render(<TodayScreen />, { wrapper });
+    await show();
     await screen.findByText('Hi, Ananya');
     await screen.findByText('Prenatal multivitamin');
 
     expect(screen.queryByText('Next appointment')).toBeNull();
     expect(screen.queryByText('Booking visit')).toBeNull();
+  });
+});
+
+describe('Today on a phone without the household key', () => {
+  it('says so, shows no health data, and offers to add the key', async () => {
+    await copyOldData(store, 'p1', { pregnancy: null, readings: mockRows().today, medications: [], doses: [], appointments: [] });
+    const locked: Vault = { ...vault, state: 'needs-key', householdKey: null, sync: null };
+    await render(<TodayScreen />, { wrapper: vaultWrapper(locked) });
+
+    expect(await screen.findByText('This phone needs the household key')).toBeTruthy();
+    expect(screen.getByLabelText('0 kicks today')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Add the key' }));
+    expect(router.push).toHaveBeenCalledWith('/household-key');
   });
 });
 
@@ -291,7 +278,7 @@ describe('Today left open as the day goes by', () => {
       { id: 'a3', pregnancy_id: 'p1', title: 'Growth scan', appt_date: '2026-10-03', appt_time: '09:00:00', place: null },
       { id: 'a4', pregnancy_id: 'p1', title: 'Dentist', appt_date: '2026-10-03', appt_time: '11:00:00', place: null },
     );
-    await render(<TodayScreen />, { wrapper });
+    await show();
     expect(await screen.findByRole('link', { name: /^Next appointment: Growth scan, / })).toBeTruthy();
 
     // Just after 9:01: the 9:00 one has started, so the 11:00 one is next.
@@ -317,7 +304,7 @@ describe('Today left open as the day goes by', () => {
       { id: 'a5', pregnancy_id: 'p1', title: 'Late scan', appt_date: '2026-10-03', appt_time: '23:59:00', place: null },
       { id: 'a6', pregnancy_id: 'p1', title: 'Morning clinic', appt_date: '2026-10-04', appt_time: '09:00:00', place: null },
     );
-    await render(<TodayScreen />, { wrapper });
+    await show();
     expect(await screen.findByRole('link', { name: /^Next appointment: Late scan, / })).toBeTruthy();
 
     // 0.2 seconds past midnight: the minute has turned over, the day's own timer has not gone off.

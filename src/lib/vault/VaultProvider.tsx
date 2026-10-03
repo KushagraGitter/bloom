@@ -7,7 +7,7 @@ import { loadHouseholdKey, saveHouseholdKey } from '@/lib/vault/keys';
 import type { LocalStore } from '@/lib/vault/localStore';
 import { openLocalStoreAsync } from '@/lib/vault/openDb';
 import { countVaultRecords, supabaseVault } from '@/lib/vault/remote';
-import { useVaultSync, type VaultSyncStatus } from '@/lib/vault/useVaultSync';
+import { useVaultSync } from '@/lib/vault/useVaultSync';
 
 export type VaultState =
   /** Not signed in to a pregnancy yet. */
@@ -27,7 +27,8 @@ export type Vault = {
   role: 'owner' | 'partner' | null;
   householdKey: HouseholdKey | null;
   store: LocalStore | null;
-  sync: VaultSyncStatus | null;
+  /** Sync status, and `requestSync` to upload a change straight away. Null until ready. */
+  sync: ReturnType<typeof useVaultSync> | null;
   /** Takes a key scanned or typed on this phone. Resolves false if it doesn't belong to this household. */
   adoptKey: (key: HouseholdKey) => Promise<boolean>;
   retry: () => void;
@@ -44,7 +45,8 @@ const IDLE: Vault = {
   retry: () => {},
 };
 
-const VaultContext = createContext<Vault>(IDLE);
+/** Exported so tests can hand screens a ready vault. */
+export const VaultContext = createContext<Vault>(IDLE);
 
 /** The phone's own database, opened once for the life of the app. */
 let storePromise: Promise<LocalStore> | null = null;

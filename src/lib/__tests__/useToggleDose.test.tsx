@@ -1,109 +1,84 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
-import { supabase } from '@/lib/supabase';
-import type { Dose } from '@/lib/vitamins';
+import type { LocalStore } from '@/lib/vault/localStore';
+import { readyVault } from '@/lib/vault/testHelpers';
+import { vaultWrapper } from '@/lib/vault/testWrapper';
+import type { Vault } from '@/lib/vault/VaultProvider';
 
-import { useToggleDose } from '../data';
+import { doseId, useDoses, useToggleDose } from '../data';
 
 jest.mock('@/lib/session', () => ({ useSession: () => ({ session: { user: { id: 'me' } }, loading: false }) }));
+jest.mock('@/lib/supabase', () => ({ supabase: {} }));
+jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));
 
-// Each write waits until the test lets it finish, so the order requests are
-// sent in is visible.
-jest.mock('@/lib/supabase', () => {
-  const calls: string[] = [];
-  const pending: ((error: Error | null) => void)[] = [];
-  const settle = () => new Promise((resolve) => pending.push((error) => resolve({ error })));
-  const from = () => ({
-    upsert: () => {
-      calls.push('upsert');
-      return settle();
-    },
-    delete: () => ({
-      eq: () => ({
-        eq: () => {
-          calls.push('delete');
-          return settle();
-        },
-      }),
-    }),
-  });
-  return { supabase: { from, __calls: calls, __finish: (error: Error | null = null) => pending.shift()?.(error) } };
+const DAY = '2026-10-03';
+
+let vault: Vault;
+let store: LocalStore;
+let syncs: number[];
+
+beforeEach(async () => {
+  ({ vault, store, syncs } = await readyVault());
 });
 
-const mocked = supabase as unknown as { __calls: string[]; __finish: (error?: Error | null) => void };
-const DAY = '2026-10-03';
-const KEY = ['doses', 'p1'];
-
-function setup(existing: Dose[] = []) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { gcTime: Infinity } } });
-  client.setQueryData(KEY, existing);
-  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  return { client, render: () => renderHook(() => useToggleDose('p1'), { wrapper }) };
+async function setup() {
+  return renderHook(() => ({ toggle: useToggleDose('p1'), doses: useDoses('p1') }), { wrapper: vaultWrapper(vault) });
 }
 
-const dose = (medication_id: string): Dose => ({ medication_id, pregnancy_id: 'p1', day: DAY, taken_at: `${DAY}T08:00:00Z`, logged_by: 'kush' });
-
-beforeEach(() => {
-  mocked.__calls.length = 0;
-});
-
 describe('useToggleDose', () => {
-  it('shows a tick at once, stamped with who made it', async () => {
-    const { client, render } = setup();
-    const { result } = await render();
+  it('saves a tick in the vault, stamped with who made it, and starts a sync', async () => {
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.toggle.mutateAsync({ medicationId: 'm1', day: DAY, taken: true });
+    });
 
+    expect(await store.get(doseId('m1', DAY))).toMatchObject({
+      kind: 'dose',
+      dirty: true,
+      deleted: false,
+      data: { medication_id: 'm1', day: DAY, logged_by: 'me' },
+    });
+    expect(syncs).toHaveLength(1);
+    await waitFor(() => expect(result.current.doses.data).toEqual([expect.objectContaining({ medication_id: 'm1', pregnancy_id: 'p1', day: DAY })]));
+  });
+
+  it('un-ticks only that dose, leaving a delete for the other phone', async () => {
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.toggle.mutateAsync({ medicationId: 'm1', day: DAY, taken: true });
+      await result.current.toggle.mutateAsync({ medicationId: 'm2', day: DAY, taken: true });
+      await result.current.toggle.mutateAsync({ medicationId: 'm1', day: DAY, taken: false });
+    });
+
+    expect(await store.get(doseId('m1', DAY))).toMatchObject({ deleted: true, dirty: true, data: null });
+    await waitFor(() => expect(result.current.doses.data?.map((d) => d.medication_id)).toEqual(['m2']));
+  });
+
+  it('gives a dose the same id on either phone, so ticking it on both leaves one', () => {
+    expect(doseId('m1', DAY)).toBe(doseId('m1', DAY));
+    expect(doseId('m1', DAY)).not.toBe(doseId('m1', '2026-10-04'));
+    expect(doseId('m1', DAY)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it('applies a quick tick and un-tick in the order they were made', async () => {
+    const { result } = await setup();
+    await act(async () => {
+      result.current.toggle.mutate({ medicationId: 'm1', day: DAY, taken: true });
+      result.current.toggle.mutate({ medicationId: 'm1', day: DAY, taken: false });
+    });
+
+    await waitFor(() => expect(result.current.toggle.isSuccess).toBe(true));
+    await waitFor(async () => expect(await store.get(doseId('m1', DAY))).toMatchObject({ deleted: true }));
+  });
+
+  it('fails without touching anything on a phone that has no key yet', async () => {
+    const locked: Vault = { ...vault, state: 'needs-key', householdKey: null, sync: null };
+    const { result } = await renderHook(() => useToggleDose('p1'), { wrapper: vaultWrapper(locked) });
     await act(async () => {
       result.current.mutate({ medicationId: 'm1', day: DAY, taken: true });
     });
-    expect(client.getQueryData<Dose[]>(KEY)).toEqual([expect.objectContaining({ medication_id: 'm1', day: DAY, logged_by: 'me' })]);
 
-    await act(async () => mocked.__finish());
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-  });
-
-  it('removes an un-ticked dose at once and leaves the others', async () => {
-    const { client, render } = setup([dose('m1'), dose('m2')]);
-    const { result } = await render();
-
-    await act(async () => {
-      result.current.mutate({ medicationId: 'm1', day: DAY, taken: false });
-    });
-    expect(client.getQueryData<Dose[]>(KEY)?.map((d) => d.medication_id)).toEqual(['m2']);
-
-    await act(async () => mocked.__finish());
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-  });
-
-  it('puts the tick back the way it was when saving fails', async () => {
-    const { client, render } = setup([dose('m2')]);
-    const { result } = await render();
-
-    await act(async () => {
-      result.current.mutate({ medicationId: 'm1', day: DAY, taken: true });
-    });
-    expect(client.getQueryData<Dose[]>(KEY)).toHaveLength(2);
-
-    await act(async () => mocked.__finish(new Error('offline')));
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(client.getQueryData<Dose[]>(KEY)?.map((d) => d.medication_id)).toEqual(['m2']);
-  });
-
-  it('sends ticks one after another, so a quick tick and un-tick land in order', async () => {
-    const { render } = setup();
-    const { result } = await render();
-
-    await act(async () => {
-      result.current.mutate({ medicationId: 'm1', day: DAY, taken: true });
-      result.current.mutate({ medicationId: 'm1', day: DAY, taken: false });
-    });
-    expect(mocked.__calls).toEqual(['upsert']);
-
-    await act(async () => mocked.__finish());
-    await waitFor(() => expect(mocked.__calls).toEqual(['upsert', 'delete']));
-
-    await act(async () => mocked.__finish());
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(await store.get(doseId('m1', DAY))).toBeNull();
   });
 });
