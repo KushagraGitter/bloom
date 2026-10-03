@@ -61,8 +61,7 @@ end;
 $$;
 
 create temp table invite as
-with i as (insert into public.invites (pregnancy_id) select pregnancy_id from ids returning code)
-select code from i;
+select i.code from public.new_invite((select pregnancy_id from ids)) i;
 
 select pg_temp.check((select code ~ '^[0-9]{6}$' from invite), 'invite gets a 6-digit code');
 
@@ -95,7 +94,7 @@ $$;
 
 do $$
 begin
-  insert into public.invites (pregnancy_id) select pregnancy_id from ids;
+  perform public.new_invite((select pregnancy_id from ids));
   raise exception 'FAILED: stranger created an invite';
 exception when insufficient_privilege then
   raise notice 'ok: stranger cannot create invites';
@@ -155,6 +154,15 @@ update public.pregnancies set nickname = 'Partner edit';
 select pg_temp.check((select nickname = 'Bean' from public.pregnancies), 'partner cannot edit her profile details');
 select pg_temp.check((select count(*) = 0 from public.invites), 'partner cannot see invites');
 
+do $$
+begin
+  perform public.new_invite((select pregnancy_id from ids));
+  raise exception 'FAILED: partner created an invite';
+exception when insufficient_privilege then
+  raise notice 'ok: partner cannot create invites';
+end;
+$$;
+
 insert into public.reminder_prefs (pregnancy_id, kind, enabled) select pregnancy_id, 'water', false from ids;
 
 select pg_temp.check((select public.accept_invite((select code from invite)) is null), 'a code works only once');
@@ -171,8 +179,7 @@ select pg_temp.check((select enabled = false from public.reminder_prefs), 'owner
 
 -- A second invite cannot bring in a third person.
 create temp table invite2 as
-with i as (insert into public.invites (pregnancy_id) select pregnancy_id from ids returning code)
-select code from i;
+select i.code from public.new_invite((select pregnancy_id from ids)) i;
 select pg_temp.check(
   (select public.accept_invite((select code from invite2)) = (select pregnancy_id from ids)),
   'owner redeeming their own code changes nothing'
@@ -190,8 +197,32 @@ select pg_temp.check((select nickname = 'Sprout' from public.pregnancies), 'owne
 delete from public.members where role = 'owner';
 select pg_temp.check((select count(*) = 2 from public.members), 'owner membership cannot be deleted');
 
+-- A new code replaces the unused one -------------------------------------------
+create temp table invite3 as
+select i.code from public.new_invite((select pregnancy_id from ids)) i;
+create temp table invite4 as
+select i.code from public.new_invite((select pregnancy_id from ids)) i;
+select pg_temp.check(
+  (select count(*) = 1 from public.invites where accepted_by is null),
+  'only one unused code exists at a time'
+);
+select pg_temp.check(
+  (select code from public.invites where accepted_by is null) = (select code from invite4),
+  'the newest code is the one kept'
+);
+
+do $$
+begin
+  insert into public.invites (pregnancy_id) select pregnancy_id from ids;
+  raise exception 'FAILED: owner inserted an invite directly';
+exception when insufficient_privilege then
+  raise notice 'ok: invites are only made through new_invite()';
+end;
+$$;
+
 -- Expired invites -------------------------------------------------------------
 reset role;
+delete from public.invites where accepted_by is null;
 update public.invites set accepted_by = null, accepted_at = null, expires_at = now() - interval '1 minute';
 set role authenticated;
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');

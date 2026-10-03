@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { REMINDERS, toPregnancyInsert, type Answers, type ReminderKind } from '@/lib/onboarding';
 import { localToday } from '@/lib/pregnancy';
@@ -131,11 +132,35 @@ export function useFinishOnboarding() {
 // Today: readings
 // ---------------------------------------------------------------------------
 
+function dayStart(day: string): Date {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/**
+ * Today's local date as YYYY-MM-DD. Updates at midnight and when the app comes
+ * back to the foreground, so a screen left open overnight moves to the new day.
+ */
+export function useLocalToday(): string {
+  const [day, setDay] = useState(localToday);
+  useEffect(() => {
+    const refresh = () => setDay(localToday());
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const timer = setTimeout(refresh, midnight.getTime() - now.getTime() + 1000);
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && refresh());
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
+  }, [day]);
+  return day;
+}
+
 const READING_COLUMNS = 'id, pregnancy_id, type, value_num, value_num2, value_text, taken_at, logged_by';
 
 /** Everything logged since local midnight (kicks and water are counted from this). */
-export function useTodayReadings(pregnancyId: string | undefined) {
-  const day = localToday();
+export function useTodayReadings(pregnancyId: string | undefined, day: string) {
   return useQuery({
     queryKey: keys.today(pregnancyId ?? 'none', day),
     enabled: !!pregnancyId,
@@ -144,7 +169,7 @@ export function useTodayReadings(pregnancyId: string | undefined) {
         .from('readings')
         .select(READING_COLUMNS)
         .eq('pregnancy_id', pregnancyId!)
-        .gte('taken_at', startOfLocalDay())
+        .gte('taken_at', startOfLocalDay(dayStart(day)))
         .order('taken_at', { ascending: true });
       if (error) throw error;
       return data as Reading[];
@@ -199,10 +224,10 @@ export function useLogCheckin(pregnancyId: string | undefined) {
  * overwrite each other. Removing takes away today's newest row of that type.
  * Today's list updates straight away and is put right if the write fails.
  */
-export function useTally(pregnancyId: string | undefined, type: 'kicks' | 'water') {
+export function useTally(pregnancyId: string | undefined, type: 'kicks' | 'water', day: string) {
   const queryClient = useQueryClient();
   const { session } = useSession();
-  const todayKey = keys.today(pregnancyId ?? 'none', localToday());
+  const todayKey = keys.today(pregnancyId ?? 'none', day);
 
   const optimistic = async (change: (rows: Reading[]) => Reading[]) => {
     await queryClient.cancelQueries({ queryKey: todayKey });
@@ -353,23 +378,18 @@ export function useOpenInvite(pregnancyId: string | undefined, enabled: boolean)
   });
 }
 
-/** Makes a fresh 6-digit code, replacing any open one so only one works at a time. */
+/**
+ * Makes a fresh 6-digit code. The database replaces any unused code in the
+ * same transaction, so only one code works at a time.
+ */
 export function useCreateInvite(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (): Promise<Invite> => {
-      const { error: clearError } = await supabase.from('invites').delete().eq('pregnancy_id', pregnancyId!).is('accepted_by', null);
-      if (clearError) throw clearError;
-      // The code is random; on the rare clash with another open code, try again.
-      for (let attempt = 0; ; attempt++) {
-        const { data, error } = await supabase
-          .from('invites')
-          .insert({ pregnancy_id: pregnancyId! })
-          .select('id, code, expires_at')
-          .single();
-        if (!error) return data;
-        if (error.code !== '23505' || attempt >= 2) throw error;
-      }
+      const { data, error } = await supabase.rpc('new_invite', { p_pregnancy_id: pregnancyId! });
+      if (error) throw error;
+      const row = data as Invite;
+      return { id: row.id, code: row.code, expires_at: row.expires_at };
     },
     onSuccess: (invite) => queryClient.setQueryData(keys.invite(pregnancyId ?? 'none'), invite),
   });

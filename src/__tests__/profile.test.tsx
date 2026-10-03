@@ -48,9 +48,6 @@ jest.mock('@/lib/supabase', () => {
     const result = () => {
       if (op !== 'select') {
         calls.push({ table, op, value, filters });
-        if (table === 'invites' && op === 'insert') {
-          return { data: { id: 'i1', code: '123456', expires_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString() }, error: null };
-        }
         return { data: null, error: null };
       }
       if (table === 'members') {
@@ -79,7 +76,11 @@ jest.mock('@/lib/supabase', () => {
     };
     return q;
   };
-  return { isSupabaseConfigured: true, supabase: { from, __calls: calls } };
+  const rpc = jest.fn(async (fn: string, args: unknown) => {
+    calls.push({ table: fn, op: 'rpc', value: args, filters: {} });
+    return { data: { id: 'i1', pregnancy_id: 'p1', code: '123456', expires_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString() }, error: null };
+  });
+  return { isSupabaseConfigured: true, supabase: { from, rpc, __calls: calls } };
 });
 
 const calls = () => (supabase as unknown as { __calls: { table: string; op: string; value?: unknown }[] }).__calls;
@@ -106,8 +107,7 @@ describe('Profile', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Create invite code' }));
     expect(await screen.findByText('123 456')).toBeTruthy();
     expect(screen.getByText(/^Expires in 4\d hours · works once$/)).toBeTruthy();
-    expect(calls()).toContainEqual(expect.objectContaining({ table: 'invites', op: 'delete' }));
-    expect(calls()).toContainEqual(expect.objectContaining({ table: 'invites', op: 'insert', value: { pregnancy_id: 'p1' } }));
+    expect(calls()).toContainEqual(expect.objectContaining({ table: 'new_invite', op: 'rpc', value: { p_pregnancy_id: 'p1' } }));
   });
 
   it('edits a detail through the sheet', async () => {

@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { BottomSheet, Button, Card, Chip, Screen, Text, TextField } from '@/components';
 import {
   useLatestCheckins,
+  useLocalToday,
   useLogCheckin,
   useMembers,
   useMembership,
@@ -13,7 +14,7 @@ import {
   useTally,
   useTodayReadings,
 } from '@/lib/data';
-import { gestationalAge, localToday } from '@/lib/pregnancy';
+import { gestationalAge } from '@/lib/pregnancy';
 import { formatDate, initialOf } from '@/lib/profile';
 import {
   CHECKINS,
@@ -48,7 +49,8 @@ export default function TodayScreen() {
   const pregnancy = membership.data?.pregnancy;
   const pregnancyId = pregnancy?.id;
 
-  const today = useTodayReadings(pregnancyId);
+  const day = useLocalToday();
+  const today = useTodayReadings(pregnancyId, day);
   const latest = useLatestCheckins(pregnancyId);
   const members = useMembers(pregnancyId);
   useReadingsRealtime(pregnancyId);
@@ -59,7 +61,7 @@ export default function TodayScreen() {
   if (!pregnancy) return null;
 
   const units: Units = pregnancy.units;
-  const ga = gestationalAge(pregnancy.lmp_date, localToday());
+  const ga = gestationalAge(pregnancy.lmp_date, day);
   const name = profile.data?.name?.trim();
   const firstName = name?.split(' ')[0];
   const sizeLine = babySizeLine(ga.weeks, pregnancy.babies);
@@ -156,16 +158,16 @@ export default function TodayScreen() {
         </View>
       </View>
 
-      <Tallies pregnancyId={pregnancy.id} rows={rows} />
+      <Tallies pregnancyId={pregnancy.id} day={day} rows={rows} />
 
       <CheckinSheet type={sheet} units={units} pregnancyId={pregnancy.id} onClose={() => setSheet(null)} />
     </Screen>
   );
 }
 
-function Tallies({ pregnancyId, rows }: { pregnancyId: string; rows: Reading[] }) {
-  const kicks = useTally(pregnancyId, 'kicks');
-  const water = useTally(pregnancyId, 'water');
+function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string; rows: Reading[] }) {
+  const kicks = useTally(pregnancyId, 'kicks', day);
+  const water = useTally(pregnancyId, 'water', day);
   const kickCount = countOf(rows, 'kicks');
   const glasses = countOf(rows, 'water');
   const lastGlass = latestOf(rows, 'water');

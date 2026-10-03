@@ -79,7 +79,7 @@ sees nothing.
 | `profiles`       | One per login, created automatically on sign-up |
 | `pregnancies`    | LMP date (due date is generated as LMP + 280 days), dating method, health details |
 | `members`        | Who can see a pregnancy: `owner` or `partner` |
-| `invites`        | 6-digit codes, valid 48 hours, single use; redeemed through `accept_invite(code)` |
+| `invites`        | 6-digit codes, valid 48 hours, single use, one unused code per pregnancy; made by `new_invite(pregnancy)`, redeemed through `accept_invite(code)` |
 | `readings`       | Weight, BP, sugar, sleep, kicks and water check-ins, stamped with who logged them |
 | `reminder_prefs` | Per-person reminder settings |
 
