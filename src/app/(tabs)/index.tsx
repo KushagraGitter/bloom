@@ -1,9 +1,11 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { BottomSheet, Button, Card, CheckIcon, Chip, Screen, Text, TextField } from '@/components';
+import { BottomSheet, Button, CalendarIcon, Card, CheckIcon, Chip, Screen, SmileIcon, Text, TextField, TimerIcon } from '@/components';
+import { cardLine, dayLong, dayNumber, localTime, monthAbbr, nextUp } from '@/lib/appointments';
 import {
+  useAppointments,
   useDoses,
   useLatestCheckins,
   useLocalToday,
@@ -158,7 +160,11 @@ export default function TodayScreen() {
 
       <Tallies pregnancyId={pregnancy.id} day={day} rows={rows} />
 
+      <Tools />
+
       <VitaminsCard pregnancyId={pregnancy.id} day={day} />
+
+      <NextAppointment pregnancyId={pregnancy.id} day={day} />
 
       <CheckinSheet type={sheet} units={units} pregnancyId={pregnancy.id} onClose={() => setSheet(null)} />
     </Screen>
@@ -217,6 +223,51 @@ function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string;
         </Text>
       )}
     </View>
+  );
+}
+
+/** The design's three tools. Only appointments are built so far; the others are marked as coming. */
+function Tools() {
+  return (
+    <View style={styles.section}>
+      <Text variant="title" accessibilityRole="header">
+        Tools
+      </Text>
+      <View style={styles.tools}>
+        <ToolTile lines={['Mood &', 'symptoms']} tone={colors.pink} icon={<SmileIcon />} />
+        <ToolTile lines={['Appointments']} tone={colors.surface} icon={<CalendarIcon />} onPress={() => router.push('/appointments')} />
+        <ToolTile lines={['Contraction', 'timer']} tone={colors.mint} icon={<TimerIcon />} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Three of these share a row, which on a phone leaves a word like
+ * "Appointments" barely room, so the label is given in lines and each one
+ * shrinks a little rather than a word breaking in the middle.
+ */
+function ToolTile({ lines, tone, icon, onPress }: { lines: string[]; tone: string; icon: ReactNode; onPress?: () => void }) {
+  const label = lines.join(' ');
+  const soon = !onPress;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={soon ? `${label}, coming soon` : label}
+      accessibilityState={{ disabled: soon }}
+      disabled={soon}
+      onPress={onPress}
+      style={[styles.tool, { backgroundColor: tone }, soon && styles.toolSoon]}>
+      {icon}
+      <View>
+        {lines.map((line) => (
+          <Text key={line} style={styles.toolLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            {line}
+          </Text>
+        ))}
+      </View>
+      {soon && <Text style={styles.toolTag}>Soon</Text>}
+    </Pressable>
   );
 }
 
@@ -284,6 +335,35 @@ function VitaminsCard({ pregnancyId, day }: { pregnancyId: string; day: string }
         </Text>
       )}
     </Card>
+  );
+}
+
+/** The next appointment that hasn't happened yet, linking to the calendar. Nothing shows when none is booked. */
+function NextAppointment({ pregnancyId, day }: { pregnancyId: string; day: string }) {
+  const appointments = useAppointments(pregnancyId);
+  const next = nextUp(appointments.data ?? [], day, localTime());
+  if (!next) return null;
+  const line = cardLine(next);
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`Next appointment: ${next.title}, ${dayLong(next.appt_date)}, ${line}`}
+      onPress={() => router.push('/appointments')}
+      style={styles.nextCard}>
+      <View style={styles.nextTile}>
+        <Text style={styles.nextMonth}>{monthAbbr(next.appt_date)}</Text>
+        <Text style={styles.nextDay}>{dayNumber(next.appt_date)}</Text>
+      </View>
+      <View style={styles.nextText}>
+        <Text style={styles.nextKicker}>Next appointment</Text>
+        <Text style={styles.nextTitle} numberOfLines={2}>
+          {next.title}
+        </Text>
+        <Text style={styles.nextMeta} numberOfLines={1}>
+          {line}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -457,4 +537,43 @@ const styles = StyleSheet.create({
   vitText: { flex: 1 },
   vitName: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.ink },
   vitWhen: { fontSize: 13 },
+  tools: { flexDirection: 'row', gap: 10 },
+  tool: {
+    flex: 1,
+    minHeight: 96,
+    padding: 12,
+    gap: 8,
+    borderRadius: radius.tool,
+    borderWidth: border.width,
+    borderColor: border.color,
+  },
+  toolSoon: { opacity: 0.6 },
+  toolLabel: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
+  toolTag: { fontFamily: fonts.bodyBold, fontSize: 11, color: colors.inkMuted },
+  nextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: radius.panel,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.pink,
+  },
+  nextTile: {
+    width: 56,
+    height: 60,
+    borderRadius: 16,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextMonth: { fontFamily: fonts.bodyHeavy, fontSize: 11, color: colors.ink },
+  nextDay: { fontFamily: fonts.display, fontSize: 24, lineHeight: 24, color: colors.ink },
+  nextText: { flex: 1, minWidth: 0, gap: 2 },
+  nextKicker: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.ink },
+  nextTitle: { fontFamily: fonts.display, fontSize: 18, lineHeight: 21, color: colors.ink },
+  nextMeta: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.ink },
 });

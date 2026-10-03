@@ -323,6 +323,75 @@ delete from public.medications where id = (select medication_id from med);
 select pg_temp.check((select count(*) = 0 from public.med_doses), 'removing a medication removes its doses');
 select pg_temp.check((select count(*) = 1 from public.medications), 'the owner can remove a medication');
 
+-- Appointments ----------------------------------------------------------------
+insert into public.appointments (pregnancy_id, title, appt_date, appt_time, place)
+select pregnancy_id, 'Glucose tolerance test', '2026-10-14', '09:00', 'City Clinic' from ids;
+select pg_temp.check((select count(*) = 1 from public.appointments), 'owner books an appointment');
+select pg_temp.check((select appt_time = time '09:00' from public.appointments), 'its time is kept as it was typed');
+
+insert into public.appointments (pregnancy_id, title, appt_date)
+select pregnancy_id, 'Dentist', '2026-10-20' from ids;
+select pg_temp.check(
+  (select appt_time is null and place is null from public.appointments where title = 'Dentist'),
+  'time and place are optional');
+
+select pg_temp.rejects(
+  $q$insert into public.appointments (pregnancy_id, title, appt_date) select pregnancy_id, '   ', '2026-10-21' from ids$q$,
+  '23514', 'a blank appointment title');
+select pg_temp.rejects(
+  $q$insert into public.appointments (pregnancy_id, title, appt_date) select pregnancy_id, repeat('x', 81), '2026-10-21' from ids$q$,
+  '23514', 'an appointment title over 80 characters');
+select pg_temp.rejects(
+  $q$insert into public.appointments (pregnancy_id, title, appt_date, place) select pregnancy_id, 'Scan', '2026-10-21', repeat('x', 121) from ids$q$,
+  '23514', 'a place over 120 characters');
+select pg_temp.rejects(
+  $q$insert into public.appointments (pregnancy_id, title) select pregnancy_id, 'Scan' from ids$q$,
+  '23502', 'an appointment with no date');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+select pg_temp.check((select count(*) = 2 from public.appointments), 'partner sees her appointments');
+
+insert into public.appointments (pregnancy_id, title, appt_date, appt_time)
+select pregnancy_id, 'Growth scan', '2026-11-11', '10:00' from ids;
+select pg_temp.check((select count(*) = 3 from public.appointments), 'partner can book an appointment');
+
+update public.appointments set appt_time = '10:30' where title = 'Growth scan';
+select pg_temp.check(
+  (select appt_time = time '10:30' from public.appointments where title = 'Growth scan'),
+  'either of them can change an appointment');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.check((select count(*) = 3 from public.appointments), 'owner sees what her partner booked');
+
+delete from public.appointments where title = 'Dentist';
+select pg_temp.check((select count(*) = 2 from public.appointments), 'either of them can cancel an appointment');
+
+-- Even a member cannot move one into a pregnancy they do not belong to.
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+create temp table other_pregnancy as
+with p as (insert into public.pregnancies (lmp_date) values ('2026-06-01') returning id)
+select id as pregnancy_id from p;
+
+select pg_temp.check((select count(*) = 0 from public.appointments), 'stranger sees no appointments');
+select pg_temp.rejects(
+  $q$insert into public.appointments (pregnancy_id, title, appt_date) select pregnancy_id, 'Sneaky', '2026-10-21' from ids$q$,
+  '42501', 'a stranger booking an appointment');
+update public.appointments set title = 'hacked';
+delete from public.appointments;
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select pg_temp.check(
+  (select count(*) = 2 and bool_and(title <> 'hacked') from public.appointments),
+  'a stranger cannot change or cancel her appointments');
+select pg_temp.rejects(
+  $q$update public.appointments set pregnancy_id = (select pregnancy_id from other_pregnancy)$q$,
+  '42501', 'moving an appointment into another pregnancy');
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+delete from public.pregnancies where id = (select pregnancy_id from other_pregnancy);
+
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+
 -- Expired invites -------------------------------------------------------------
 reset role;
 delete from public.invites where accepted_by is null;

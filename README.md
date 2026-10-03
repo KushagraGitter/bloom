@@ -18,10 +18,11 @@ gets a login that sees everything and can log on her behalf.
 src/app/            routes (each design artboard becomes one)
   (auth)/           welcome and Google sign-in
   onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
-  (tabs)/           Today (check-ins, kicks, water, vitamins) and Vitamins; Meals, Reports and Progress are placeholders
+  (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment) and Vitamins; Meals, Reports and Progress are placeholders
+  appointments.tsx  month calendar, what is coming up, book and cancel appointments
   profile.tsx       edit details, reminders, units, partner invite code
   dev/components    dev-only gallery of the shared components
-src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen
+src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
 src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths
 supabase/
@@ -86,9 +87,10 @@ sees nothing.
 | `reminder_prefs` | Per-person reminder settings |
 | `medications`    | What she takes: name, dose, morning / afternoon / evening, and the first and last day it is due |
 | `med_doses`      | One row per medicine per day it was ticked off, stamped with who ticked it; the streak is worked out from these |
+| `appointments`   | Scans, check-ups and tests: a title, a day, and optionally a clock time and a place. The day and time are kept as typed, not as a UTC moment, so "9:00" reads the same on both phones |
 
 Invite redemption is rate-limited to 10 attempts an hour per account.
 
-Readings, medications and doses are in Supabase's Realtime publication, so a tick
-or a kick on one phone shows up on the other. The app listens on one channel per
+Readings, medications, doses and appointments are in Supabase's Realtime publication,
+so a tick, a kick or a booking on one phone shows up on the other. The app listens on one channel per
 pregnancy (`useRealtimeSync`, mounted once in the tabs layout).
