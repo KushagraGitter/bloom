@@ -18,6 +18,8 @@ export const supabase = createClient(url ?? 'http://localhost:54321', anonKey ??
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // Code exchange (PKCE) for the browser sign-in in src/lib/auth.ts.
+    flowType: 'pkce',
   },
 });
 

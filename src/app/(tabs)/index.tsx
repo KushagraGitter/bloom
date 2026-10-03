@@ -1,17 +1,26 @@
 import { Link } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { Card, Screen, Text } from '@/components';
-import { addDays, dueDateFromLmp, gestationalAge, localToday } from '@/lib/pregnancy';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { Button, Card, Screen, Text } from '@/components';
+import { signOut } from '@/lib/auth';
+import { useMembership, useProfile } from '@/lib/data';
+import { gestationalAge, localToday } from '@/lib/pregnancy';
 import { border, colors, fonts } from '@/theme/tokens';
 
-// Until onboarding saves a real pregnancy, show the design's example week.
-const DEMO_LMP = addDays(localToday(), -(24 * 7 + 3));
+function formatDate(value: string): string {
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 export default function TodayScreen() {
-  const ga = gestationalAge(DEMO_LMP, localToday());
-  const due = dueDateFromLmp(DEMO_LMP);
+  const membership = useMembership();
+  const profile = useProfile();
+  const pregnancy = membership.data?.pregnancy;
+  // The root layout only shows the tabs once a pregnancy exists.
+  if (!pregnancy) return null;
+
+  const ga = gestationalAge(pregnancy.lmp_date, localToday());
+  const firstName = profile.data?.name?.trim().split(' ')[0];
 
   return (
     <Screen>
@@ -20,7 +29,7 @@ export default function TodayScreen() {
           {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
         </Text>
         <Text variant="screenTitle" accessibilityRole="header">
-          Hi there
+          Hi{firstName ? `, ${firstName}` : ''}
         </Text>
       </View>
 
@@ -41,22 +50,18 @@ export default function TodayScreen() {
             {Math.ceil(ga.daysToGo / 7)} weeks to go
           </Text>
           <Text variant="label" color={colors.surface}>
-            Due {due}
+            Due {formatDate(pregnancy.due_date)}
           </Text>
         </View>
       </Card>
-
-      {!isSupabaseConfigured && (
-        <Card dashed>
-          <Text variant="label">Not connected to Supabase yet. Add the keys to .env.local (see README).</Text>
-        </Card>
-      )}
 
       {__DEV__ && (
         <Link href="/dev/components" style={styles.devLink}>
           Component gallery
         </Link>
       )}
+
+      <Button label="Sign out" onPress={() => signOut().catch(() => {})} />
     </Screen>
   );
 }

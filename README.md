@@ -16,11 +16,13 @@ gets a login that sees everything and can log on her behalf.
 
 ```
 src/app/            routes (each design artboard becomes one)
+  (auth)/           welcome and Google sign-in
+  onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
   (tabs)/           Today, Meals, Vitamins, Reports, Progress
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
-src/lib/            Supabase client, query client, due-date maths
+src/lib/            Supabase client, auth, session, data hooks, onboarding and due-date maths
 supabase/
   migrations/       SQL schema and RLS policies
   tests/            RLS checks against a throwaway Postgres
@@ -34,16 +36,15 @@ cp .env.example .env.local   # then add your Supabase URL and anon key
 npx expo start
 ```
 
-The app still boots without Supabase keys; Today shows a "not connected" note.
-Expo Go is fine for now. Once Google sign-in lands, a development build is
-needed (`npx eas-cli@latest build --profile development`).
+Without Supabase keys the app still opens on the welcome screen, and sign-in
+explains what is missing. Expo Go is enough to run it.
 
 ## Checks
 
 ```sh
 npm run lint
 npm run typecheck
-npm test                 # unit tests (due-date maths)
+npm test                 # unit and screen tests
 supabase/tests/run.sh    # applies migrations to a scratch Postgres and runs the RLS checks
 ```
 
@@ -55,7 +56,16 @@ these on every pull request.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. Open the SQL editor and run each file in `supabase/migrations/` in order.
-3. Copy the project URL and anon key into `.env.local`.
+3. Copy the project URL and publishable (or anon) key into `.env.local`.
+4. Google sign-in: create a Web OAuth client in Google Cloud and enter its
+   client ID and secret under Authentication → Providers → Google. Add
+   `https://<project-ref>.supabase.co/auth/v1/callback` as an authorised
+   redirect URI on the Google client.
+5. Under Authentication → URL Configuration → Redirect URLs, add `bloom://**`
+   (builds) and `exp://**` (Expo Go).
+
+The app signs in through Supabase's hosted Google page in an in-app browser,
+so it needs no Google IDs itself and works in Expo Go.
 
 ## Data model (phase 1)
 
