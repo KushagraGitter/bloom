@@ -30,7 +30,14 @@
       "expo-web-browser",
       "@react-native-community/datetimepicker",
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#6B3FF0"
+        }
+      ]
     ],
     "scheme": "bloom",
     "experiments": {

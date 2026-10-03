@@ -18,6 +18,7 @@ import {
   useUpdateName,
   useUpdatePregnancy,
 } from '@/lib/data';
+import { openSystemSettings, sendTestReminder } from '@/lib/notifications';
 import { REMINDERS, toggleCondition } from '@/lib/onboarding';
 import { gestationalAge, localToday } from '@/lib/pregnancy';
 import {
@@ -34,6 +35,7 @@ import {
   type FieldKey,
 } from '@/lib/profile';
 import { useSession } from '@/lib/session';
+import { useNotificationPermission } from '@/lib/useReminders';
 import { border, colors, fonts, radius } from '@/theme/tokens';
 
 type Editing = { key: FieldKey | 'name'; draft: string | string[] } | null;
@@ -256,6 +258,16 @@ function PartnerSection({ pregnancyId, ownerId, isOwner }: { pregnancyId: string
 function Reminders({ pregnancyId }: { pregnancyId: string }) {
   const prefs = useReminderPrefs(pregnancyId);
   const set = useSetReminder(pregnancyId);
+  const { state: permission } = useNotificationPermission();
+  const [test, setTest] = useState<'idle' | 'sent' | 'failed'>('idle');
+
+  const sendTest = () => {
+    sendTestReminder().then(
+      () => setTest('sent'),
+      () => setTest('failed'),
+    );
+  };
+
   return (
     <Group title="REMINDERS">
       {REMINDERS.map((r, i) => (
@@ -272,6 +284,22 @@ function Reminders({ pregnancyId }: { pregnancyId: string }) {
           />
         </View>
       ))}
+      {permission === 'denied' && (
+        <View style={[styles.notice, styles.rowDivider]}>
+          <Text variant="caption">
+            Notifications are off for Bloom, so none of these will arrive. Turn them on in your phone&apos;s settings.
+          </Text>
+          <Button label="Open Settings" variant="dark" onPress={() => openSystemSettings().catch(() => {})} />
+        </View>
+      )}
+      {__DEV__ && permission === 'granted' && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Send a test reminder" onPress={sendTest} style={[styles.row, styles.rowDivider]}>
+          <Text style={styles.reminderLabel}>Send a test reminder</Text>
+          <Text variant="caption">
+            {test === 'sent' ? 'On its way' : test === 'failed' ? 'Couldn’t send it' : 'Arrives in 5 seconds'}
+          </Text>
+        </Pressable>
+      )}
     </Group>
   );
 }
@@ -457,6 +485,7 @@ const styles = StyleSheet.create({
   },
   row: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 16, paddingVertical: 8 },
   rowDivider: { borderTopWidth: 2, borderTopColor: colors.line },
+  notice: { gap: 12, padding: 16 },
   rowLabel: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.inkMuted, flexShrink: 0 },
   rowValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   rowValue: { fontFamily: fonts.bodyHeavy, fontSize: 15, color: colors.ink, textAlign: 'right', flexShrink: 1 },
