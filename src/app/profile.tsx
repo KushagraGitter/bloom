@@ -36,11 +36,21 @@ import {
 } from '@/lib/profile';
 import { useSession } from '@/lib/session';
 import { useNotificationPermission } from '@/lib/useReminders';
+import { useVault, type VaultState } from '@/lib/vault/VaultProvider';
 import { border, colors, fonts, radius } from '@/theme/tokens';
 
 type Editing = { key: FieldKey | 'name'; draft: string | string[] } | null;
 
 const NAME_FIELD: Omit<Field, 'key'> = { label: 'Name', kind: 'text' };
+
+const KEY_STATUS: Record<VaultState, string> = {
+  idle: '',
+  loading: 'Checking…',
+  ready: 'On this phone',
+  'needs-key': 'Needed on this phone',
+  error: "Couldn't check",
+  unsupported: 'Phone app only',
+};
 
 export default function ProfileScreen() {
   const { session } = useSession();
@@ -49,6 +59,7 @@ export default function ProfileScreen() {
   const pregnancy = membership.data?.pregnancy;
   const isOwner = membership.data?.role === 'owner';
   const [editing, setEditing] = useState<Editing>(null);
+  const vault = useVault();
 
   if (!pregnancy) return null;
 
@@ -91,6 +102,10 @@ export default function ProfileScreen() {
       </Group>
 
       <PartnerSection pregnancyId={pregnancy.id} ownerId={pregnancy.owner_id} isOwner={isOwner} />
+
+      <Group title="PRIVACY">
+        <Row label="Household key" value={KEY_STATUS[vault.state]} onPress={() => router.push('/household-key')} first />
+      </Group>
 
       {GROUPS.map((g) => (
         <Group key={g.title} title={g.title}>

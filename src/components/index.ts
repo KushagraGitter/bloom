@@ -6,6 +6,7 @@ export { Chip } from './Chip';
 export { DateField } from './DateField';
 export { CalendarIcon, CheckIcon, ChevronIcon, CrossIcon, PillIcon, PlusIcon, SmileIcon, TimerIcon, TrashIcon } from './icons';
 export { OptionCard } from './OptionCard';
+export { QrCode } from './QrCode';
 export { Screen } from './Screen';
 export { TabBar } from './TabBar';
 export { Text } from './Text';

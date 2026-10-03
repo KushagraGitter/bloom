@@ -23,3 +23,13 @@ export const supabaseVault: VaultRemote = {
     return (data ?? []) as RemoteRecord[];
   },
 };
+
+/** How many encrypted records the household has saved so far. */
+export async function countVaultRecords(pregnancyId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('vault_records')
+    .select('id', { count: 'exact', head: true })
+    .eq('pregnancy_id', pregnancyId);
+  if (error) throw error;
+  return count ?? 0;
+}

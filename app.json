@@ -37,7 +37,16 @@
           "icon": "./assets/android-icon-monochrome.png",
           "color": "#6B3FF0"
         }
-      ]
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Bloom uses the camera to scan the household code on your partner's phone.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-asset"
     ],
     "scheme": "bloom",
     "experiments": {
