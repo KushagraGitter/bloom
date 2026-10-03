@@ -134,6 +134,15 @@ describe('Profile', () => {
   });
 });
 
+describe('Profile household key', () => {
+  it('opens the household key screen', async () => {
+    const { router } = jest.requireMock<{ router: { push: jest.Mock } }>('expo-router');
+    await render(<ProfileScreen />, { wrapper });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Household key: not set. Edit' }));
+    expect(router.push).toHaveBeenCalledWith('/household-key');
+  });
+});
+
 describe('Profile reminders and the phone’s permission', () => {
   const noteText = /Notifications are off for Bloom/;
 

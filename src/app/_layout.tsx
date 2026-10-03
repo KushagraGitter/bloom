@@ -19,6 +19,7 @@ import { useMembership } from '@/lib/data';
 import { queryClient } from '@/lib/queryClient';
 import { SessionProvider, useSession } from '@/lib/session';
 import { useReminders } from '@/lib/useReminders';
+import { VaultProvider } from '@/lib/vault/VaultProvider';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -77,21 +78,24 @@ function RootNavigator() {
   const hasPregnancy = !!membership.data;
 
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ground } }}>
-      <Stack.Protected guard={!signedIn}>
-        <Stack.Screen name="(auth)" />
-      </Stack.Protected>
-      <Stack.Protected guard={signedIn && !hasPregnancy}>
-        <Stack.Screen name="onboarding" />
-      </Stack.Protected>
-      <Stack.Protected guard={signedIn && hasPregnancy}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="appointments" />
-        <Stack.Screen name="dev/components" />
-      </Stack.Protected>
-      <Stack.Screen name="auth/callback" />
-    </Stack>
+    <VaultProvider pregnancyId={membership.data?.pregnancy.id} role={membership.data?.role}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ground } }}>
+        <Stack.Protected guard={!signedIn}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+        <Stack.Protected guard={signedIn && !hasPregnancy}>
+          <Stack.Screen name="onboarding" />
+        </Stack.Protected>
+        <Stack.Protected guard={signedIn && hasPregnancy}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="profile" />
+          <Stack.Screen name="appointments" />
+          <Stack.Screen name="household-key" />
+          <Stack.Screen name="dev/components" />
+        </Stack.Protected>
+        <Stack.Screen name="auth/callback" />
+      </Stack>
+    </VaultProvider>
   );
 }
 

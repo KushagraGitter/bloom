@@ -21,6 +21,7 @@ src/app/            routes (each design artboard becomes one)
   (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment) and Vitamins; Meals, Reports and Progress are placeholders
   appointments.tsx  month calendar, what is coming up, book and cancel appointments
   profile.tsx       edit details, reminders, units, partner invite code
+  household-key.tsx show the household key as a QR code or recovery phrase, or take it on a new phone
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
@@ -165,6 +166,13 @@ Health data is moving off Supabase's readable tables and onto the phones
 sealed blob and timestamps. It has no delete policy, and its trigger assigns the
 pull order (`seq`) and drops an update older than the stored one.
 
+`VaultProvider` (in the root layout) opens the phone's database, finds the
+household key and keeps syncing. Her phone makes the key the first time it opens
+while the household has nothing saved yet. Every other phone (the partner's, or
+hers after a loss once records exist) gets it from Profile, Household key:
+by scanning the QR code shown on a phone that has it, or by typing the recovery
+phrase. A key that can't open what the household already saved is refused. The
+web build has no keychain or on-phone database, so it skips all of this.
+
 Not done yet: switching each screen from the Supabase tables to the local store,
-giving the partner's phone the key by QR code, the recovery screens, key rotation,
-and removing the old readable tables.
+key rotation, and removing the old readable tables.
