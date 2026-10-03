@@ -1,5 +1,6 @@
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
 
@@ -39,8 +40,21 @@ export function parseAuthCallback(url: string): CallbackParams {
 /**
  * Google sign-in through Supabase's hosted OAuth page in an in-app browser
  * sheet. Works in Expo Go; the Google client ID and secret live in Supabase.
+ *
+ * On web the page itself goes to Google and back to `/auth/callback`, where
+ * the Supabase client exchanges the code (`detectSessionInUrl`). A popup
+ * opened after the network request would lose the tap and be blocked.
  */
-export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled'> {
+export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled' | 'redirecting'> {
+  if (Platform.OS === 'web') {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) throw error;
+    return 'redirecting';
+  }
+
   const redirectTo = authRedirectUri();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',

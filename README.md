@@ -62,7 +62,7 @@ these on every pull request.
    `https://<project-ref>.supabase.co/auth/v1/callback` as an authorised
    redirect URI on the Google client.
 5. Under Authentication → URL Configuration → Redirect URLs, add `bloom://**`
-   (builds) and `exp://**` (Expo Go).
+   (builds), `exp://**` (Expo Go) and `http://localhost:8081/**` (web dev).
 
 The app signs in through Supabase's hosted Google page in an in-app browser,
 so it needs no Google IDs itself and works in Expo Go.
