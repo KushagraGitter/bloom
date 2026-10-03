@@ -1,12 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import ProfileScreen from '@/app/profile';
+import { openSystemSettings, permissionState, sendTestReminder } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn(), canGoBack: () => true, replace: jest.fn() } }));
 jest.mock('@/lib/auth', () => ({ signOut: jest.fn(async () => {}) }));
+jest.mock('@/lib/notifications', () => ({
+  permissionState: jest.fn(),
+  askForPermission: jest.fn(),
+  sendTestReminder: jest.fn(),
+  openSystemSettings: jest.fn(),
+}));
 
 jest.mock('@/lib/session', () => ({
   useSession: () => ({ session: { user: { id: 'me', email: 'ananya@example.com' } }, loading: false }),
@@ -92,6 +99,14 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+afterEach(() => jest.restoreAllMocks());
+
+beforeEach(() => {
+  jest.mocked(permissionState).mockReset().mockResolvedValue('granted');
+  jest.mocked(sendTestReminder).mockReset().mockResolvedValue();
+  jest.mocked(openSystemSettings).mockReset().mockResolvedValue();
+});
+
 describe('Profile', () => {
   it('shows details and this person’s reminder switches', async () => {
     await render(<ProfileScreen />, { wrapper });
@@ -116,5 +131,70 @@ describe('Profile', () => {
     await fireEvent.changeText(screen.getByLabelText('Nickname'), 'Peanut');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
     expect(calls()).toContainEqual(expect.objectContaining({ table: 'pregnancies', op: 'update', value: { nickname: 'Peanut' } }));
+  });
+});
+
+describe('Profile reminders and the phone’s permission', () => {
+  const noteText = /Notifications are off for Bloom/;
+
+  /** The whole screen, the partner list included, has finished loading. */
+  const loaded = () => waitFor(() => expect(screen.getAllByText('Ananya Rao')).toHaveLength(2));
+
+  it('says so when the phone has notifications turned off, and takes her to Settings', async () => {
+    jest.mocked(permissionState).mockResolvedValue('denied');
+    await render(<ProfileScreen />, { wrapper });
+    await loaded();
+
+    expect(await screen.findByText(noteText)).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Open Settings' }));
+    expect(openSystemSettings).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Send a test reminder' })).toBeNull();
+  });
+
+  it('keeps quiet about it when notifications are allowed', async () => {
+    await render(<ProfileScreen />, { wrapper });
+    await loaded();
+    await screen.findByRole('button', { name: 'Send a test reminder' });
+    expect(screen.queryByText(noteText)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open Settings' })).toBeNull();
+  });
+
+  it('keeps quiet about it before the phone has been asked', async () => {
+    jest.mocked(permissionState).mockResolvedValue('undetermined');
+    await render(<ProfileScreen />, { wrapper });
+    await loaded();
+    await screen.findByRole('switch', { name: 'Vitamins', checked: true });
+    await waitFor(() => expect(permissionState).toHaveBeenCalled());
+    expect(screen.queryByText(noteText)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Send a test reminder' })).toBeNull();
+  });
+
+  it('lets a development build send itself a test reminder', async () => {
+    await render(<ProfileScreen />, { wrapper });
+    await loaded();
+    expect(await screen.findByText('Arrives in 5 seconds')).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Send a test reminder' }));
+    expect(sendTestReminder).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('On its way')).toBeTruthy();
+  });
+
+  it('keeps the test reminder out of a release build', async () => {
+    jest.replaceProperty(globalThis as { __DEV__?: boolean }, '__DEV__', false);
+    await render(<ProfileScreen />, { wrapper });
+    await loaded();
+    await screen.findByRole('switch', { name: 'Vitamins', checked: true });
+    await waitFor(() => expect(permissionState).toHaveBeenCalled());
+    await screen.findByText('REMINDERS');
+    expect(screen.queryByRole('button', { name: 'Send a test reminder' })).toBeNull();
+    expect(screen.queryByText('Arrives in 5 seconds')).toBeNull();
+  });
+
+  it('says when the test reminder could not be sent', async () => {
+    jest.mocked(sendTestReminder).mockRejectedValue(new Error('no'));
+    await render(<ProfileScreen />, { wrapper });
+    await loaded();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Send a test reminder' }));
+    expect(await screen.findByText('Couldn’t send it')).toBeTruthy();
   });
 });

@@ -21,6 +21,25 @@ jest.mock('@/lib/supabase', () => {
 
 jest.mock('@/lib/auth', () => ({ signOut: jest.fn(async () => {}) }));
 
+// The date picker is native, so a button stands in for it: pressing it picks a day twelve weeks ago.
+jest.mock('@react-native-community/datetimepicker', () => {
+  const { createElement } = jest.requireActual('react');
+  const { Pressable, Text } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: (props: { onChange: (event: { type: string }, date: Date) => void }) =>
+      createElement(
+        Pressable,
+        {
+          accessibilityRole: 'button',
+          accessibilityLabel: 'Pick a date',
+          onPress: () => props.onChange({ type: 'set' }, new Date(Date.now() - 84 * 24 * 60 * 60 * 1000)),
+        },
+        createElement(Text, null, 'Pick a date'),
+      ),
+  };
+});
+
 jest.mock('react-native-safe-area-context', () => {
   const { View } = jest.requireActual('react-native');
   return {
@@ -65,5 +84,36 @@ describe('onboarding', () => {
     expect(screen.getByText('3/7')).toBeTruthy();
     await fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.getByText('3/7')).toBeTruthy();
+  });
+
+  it('only says the phone will ask about notifications while a reminder is on', async () => {
+    await render(<OnboardingScreen />, { wrapper });
+    await screen.findByDisplayValue('Ananya Rao');
+    const next = () => fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
+
+    await next();
+    await next();
+    await fireEvent.press(screen.getByRole('button', { name: /^First day of last period/ }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Pick a date' }));
+    await next();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Yes, first baby' }));
+    await next();
+    await next();
+    await next();
+    expect(screen.getByText('7/7')).toBeTruthy();
+    expect(screen.getByText(/ask your phone for permission to send notifications/)).toBeTruthy();
+
+    for (const reminder of ['Vitamins', 'Drink water', 'Kick counts']) {
+      await fireEvent.press(screen.getByRole('switch', { name: reminder }));
+    }
+    // One is still on.
+    expect(screen.getByText(/ask your phone for permission to send notifications/)).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('switch', { name: 'Appointments' }));
+    expect(screen.queryByText(/ask your phone for permission/)).toBeNull();
+    expect(screen.getByText('No reminders for now. You can switch them on any time in Profile.')).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('switch', { name: 'Drink water' }));
+    expect(screen.getByText(/ask your phone for permission to send notifications/)).toBeTruthy();
   });
 });

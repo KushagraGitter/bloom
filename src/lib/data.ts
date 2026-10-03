@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { toAppointment, type Appointment, type AppointmentRow } from '@/lib/appointments';
+import { localTime, toAppointment, type Appointment, type AppointmentRow } from '@/lib/appointments';
 import { REMINDERS, toPregnancyInsert, type Answers, type ReminderKind } from '@/lib/onboarding';
 import { localToday } from '@/lib/pregnancy';
 import type { PregnancyRow } from '@/lib/profile';
@@ -160,6 +160,34 @@ export function useLocalToday(): string {
     };
   }, [day]);
   return day;
+}
+
+/**
+ * The local time as HH:mm. Updates as each minute starts and when the app comes
+ * back to the foreground, so a screen left open moves on once a time has passed.
+ */
+export function useLocalTime(): string {
+  const [time, setTime] = useState(() => localTime());
+  useEffect(() => {
+    const refresh = () => setTime(localTime());
+    let timer: ReturnType<typeof setTimeout>;
+    // Each wake-up works out the next one from the clock, so it never drifts.
+    const schedule = () => {
+      const now = new Date();
+      const untilNextMinute = 60 * 1000 - (now.getSeconds() * 1000 + now.getMilliseconds());
+      timer = setTimeout(() => {
+        refresh();
+        schedule();
+      }, untilNextMinute + 50);
+    };
+    schedule();
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && refresh());
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
+  }, []);
+  return time;
 }
 
 const READING_COLUMNS = 'id, pregnancy_id, type, value_num, value_num2, value_text, taken_at, logged_by';

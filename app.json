@@ -28,7 +28,14 @@
       "expo-font",
       "expo-splash-screen",
       "expo-web-browser",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#6B3FF0"
+        }
+      ]
     ],
     "scheme": "bloom",
     "experiments": {

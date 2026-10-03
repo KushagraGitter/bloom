@@ -24,7 +24,7 @@ src/app/            routes (each design artboard becomes one)
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
-src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths
+src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths, reminders
 supabase/
   migrations/       SQL schema and RLS policies
   tests/            RLS checks against a throwaway Postgres
@@ -94,3 +94,58 @@ Invite redemption is rate-limited to 10 attempts an hour per account.
 Readings, medications, doses and appointments are in Supabase's Realtime publication,
 so a tick, a kick or a booking on one phone shows up on the other. The app listens on one channel per
 pregnancy (`useRealtimeSync`, mounted once in the tabs layout).
+
+## Reminders
+
+Reminders are local notifications that each phone schedules for itself, so they
+need no server and keep working offline. Which ones a person gets follows their
+own switches on Profile (`reminder_prefs`); a switch they never touched counts
+as on.
+
+| Reminder     | When |
+| ------------ | ---- |
+| Vitamins     | 8 am, 2 pm and 9 pm for the morning, afternoon and evening medicines, for today and the next 6 days. It names what is still to take and skips a dose that is already ticked off |
+| Drink water  | Every day at 9, 11, 1, 3, 5 and 7 |
+| Kick counts  | Every day at 8 pm, from week 28 |
+| Appointments | A day before at the same time of day (9 am when there is no time) and 2 hours before, for appointments in the next 60 days |
+
+The times are constants at the top of `src/lib/reminders.ts`, beside
+`planReminders`, a plain function that works out what should be scheduled (and
+the part the unit tests cover most). `src/lib/notifications.ts` replaces what the
+phone has scheduled, and `useReminders` (mounted once, in the root layout) keeps
+the two in step after a switch, a tick, a booking, a new day or coming back to
+the app.
+
+Good to know:
+
+- The phone asks for permission the first time any reminder is on. If it was
+  turned down, Profile says so and opens the phone's settings.
+- Vitamin and appointment reminders are scheduled a week and two months ahead,
+  so the app needs opening now and then (every few days is plenty) to keep
+  them topped up. Water and kick reminders repeat on their own.
+- A phone only updates its reminders while the app is open, so a dose ticked on
+  the other phone is noticed the next time this app is opened; until then the
+  reminder still arrives.
+- Signing out, or being removed from the pregnancy, clears a phone's reminders
+  the next time Bloom opens and sees it. Until then a removed partner's phone
+  keeps what it already had scheduled: up to a week of vitamin reminders and any
+  appointments, which name the medicines and the appointment. A phone that opens
+  with no sign-in at all (offline, with the old one out of date) keeps its
+  reminders too, so a bad connection never wipes them.
+- Reminders name medicines and appointments, so they show on a locked phone
+  unless iOS's Show Previews setting hides them. There is no "hide details"
+  switch yet.
+- The vitamin times are fixed for each slot (8 am, 2 pm, 9 pm).
+  `reminder_prefs.times` exists for custom times but nothing reads it yet.
+- An iPhone keeps only its 64 soonest notifications, so no more than 60 are
+  scheduled; the furthest-away ones are added as the nearer ones pass.
+- On the web there is nothing to schedule, so reminders do nothing there.
+- On Android the status-bar icon is the template's monochrome glyph
+  (`assets/android-icon-monochrome.png`) tinted purple; swap in a Bloom glyph
+  when there is one. It only shows in a development or EAS build, not Expo Go.
+- The `expo-notifications` plugin adds iOS's push entitlement (`aps-environment`)
+  to any native build, even though these reminders are local. EAS builds need
+  the paid Apple Developer account anyway, but a free Apple ID can't sign an app
+  that has it. Expo Go is unaffected.
+- In a development build, Expo Go included, Profile shows "Send a test
+  reminder", which sends one 5 seconds later.
