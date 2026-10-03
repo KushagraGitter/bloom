@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { toAppointment, type Appointment, type AppointmentRow } from '@/lib/appointments';
 import { REMINDERS, toPregnancyInsert, type Answers, type ReminderKind } from '@/lib/onboarding';
 import { localToday } from '@/lib/pregnancy';
 import type { PregnancyRow } from '@/lib/profile';
@@ -28,6 +29,7 @@ export const keys = {
   reminders: (pregnancyId: string, userId: string) => ['reminders', pregnancyId, userId] as const,
   meds: (pregnancyId: string) => ['meds', pregnancyId] as const,
   doses: (pregnancyId: string) => ['doses', pregnancyId] as const,
+  appointments: (pregnancyId: string) => ['appointments', pregnancyId] as const,
 };
 
 /** The pregnancy the signed-in user belongs to, or null if they haven't set one up or joined one. */
@@ -297,6 +299,7 @@ export function useRealtimeSync(pregnancyId: string | undefined) {
       ['readings', keys.readings(pregnancyId)],
       ['medications', keys.meds(pregnancyId)],
       ['med_doses', keys.doses(pregnancyId)],
+      ['appointments', keys.appointments(pregnancyId)],
     ] as const;
     const channel = supabase.channel(`pregnancy:${pregnancyId}`);
     for (const [table, key] of tables) {
@@ -592,5 +595,70 @@ export function useToggleDose(pregnancyId: string | undefined) {
       // server's state without them and the ticks would flicker back.
       if (queryClient.isMutating({ mutationKey }) <= 1) queryClient.invalidateQueries({ queryKey: key });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Appointments
+// ---------------------------------------------------------------------------
+
+const APPOINTMENT_COLUMNS = 'id, pregnancy_id, title, appt_date, appt_time, place';
+
+export function useAppointments(pregnancyId: string | undefined) {
+  return useQuery({
+    queryKey: keys.appointments(pregnancyId ?? 'none'),
+    enabled: !!pregnancyId,
+    queryFn: async (): Promise<Appointment[]> => {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(APPOINTMENT_COLUMNS)
+        .eq('pregnancy_id', pregnancyId!)
+        .order('appt_date', { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((row) => toAppointment(row as Appointment));
+    },
+  });
+}
+
+/**
+ * Books an appointment. The saved row goes straight into the list, so the day
+ * she just booked doesn't show "Nothing booked" while the refetch is on its way.
+ */
+export function useAddAppointment(pregnancyId: string | undefined) {
+  const queryClient = useQueryClient();
+  const key = keys.appointments(pregnancyId ?? 'none');
+  return useMutation({
+    mutationFn: async (row: AppointmentRow) => {
+      const { data, error } = await supabase
+        .from('appointments')
+        .insert({ pregnancy_id: pregnancyId!, ...row })
+        .select(APPOINTMENT_COLUMNS)
+        .single();
+      if (error) throw error;
+      return toAppointment(data as Appointment);
+    },
+    onSuccess: (created) =>
+      queryClient.setQueryData<Appointment[]>(key, (rows) => rows && [...rows.filter((a) => a.id !== created.id), created]),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+}
+
+/** Cancels an appointment for both of them. The list updates straight away and is put right if the write fails. */
+export function useRemoveAppointment(pregnancyId: string | undefined) {
+  const queryClient = useQueryClient();
+  const key = keys.appointments(pregnancyId ?? 'none');
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('appointments').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<Appointment[]>(key);
+      queryClient.setQueryData<Appointment[]>(key, (rows) => rows?.filter((a) => a.id !== id));
+      return { previous };
+    },
+    onError: (_e, _id, ctx) => queryClient.setQueryData(key, ctx?.previous),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }

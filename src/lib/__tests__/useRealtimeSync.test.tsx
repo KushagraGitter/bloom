@@ -29,7 +29,7 @@ const channels = () => (supabase.channel as jest.Mock).mock.results.map((r) => r
 beforeEach(() => jest.clearAllMocks());
 
 describe('useRealtimeSync', () => {
-  it('listens to readings, medications and doses on one channel', async () => {
+  it('listens to readings, medications, doses and appointments on one channel', async () => {
     await setup('p1').render();
 
     expect(supabase.channel).toHaveBeenCalledTimes(1);
@@ -39,7 +39,7 @@ describe('useRealtimeSync', () => {
 
     const listeners = channel.on.mock.calls as Listener[];
     expect(listeners.map(([, f]) => `${f.event} ${f.table}`).sort()).toEqual(
-      ['readings', 'medications', 'med_doses'].flatMap((t) => ['DELETE', 'INSERT', 'UPDATE'].map((e) => `${e} ${t}`)).sort(),
+      ['readings', 'medications', 'med_doses', 'appointments'].flatMap((t) => ['DELETE', 'INSERT', 'UPDATE'].map((e) => `${e} ${t}`)).sort(),
     );
     // Inserts and updates only for this pregnancy; deletes can't be filtered.
     for (const [, f] of listeners) expect(f.filter).toBe(f.event === 'DELETE' ? undefined : 'pregnancy_id=eq.p1');
@@ -57,6 +57,8 @@ describe('useRealtimeSync', () => {
     expect(invalidate).toHaveBeenLastCalledWith({ queryKey: ['meds', 'p1'] });
     on('UPDATE', 'readings')();
     expect(invalidate).toHaveBeenLastCalledWith({ queryKey: ['readings', 'p1'] });
+    on('INSERT', 'appointments')();
+    expect(invalidate).toHaveBeenLastCalledWith({ queryKey: ['appointments', 'p1'] });
   });
 
   it('leaves the channel when the app moves on', async () => {

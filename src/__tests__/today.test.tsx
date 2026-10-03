@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 
 import TodayScreen from '@/app/(tabs)/index';
+import { clock } from '@/lib/appointments';
 import { addDays, localToday } from '@/lib/pregnancy';
 import { supabase } from '@/lib/supabase';
 
@@ -48,6 +49,11 @@ function makeRows() {
     med_doses: [
       { medication_id: 'm1', pregnancy_id: 'p1', day: localToday(), taken_at: earlier, logged_by: 'kush' },
     ] as Record<string, unknown>[],
+    appointments: [
+      { id: 'a0', pregnancy_id: 'p1', title: 'Booking visit', appt_date: addDays(localToday(), -3), appt_time: '10:00', place: null },
+      { id: 'a2', pregnancy_id: 'p1', title: 'Routine checkup', appt_date: addDays(localToday(), 25), appt_time: '11:30:00', place: 'Dr Rao' },
+      { id: 'a1', pregnancy_id: 'p1', title: 'Glucose tolerance test', appt_date: addDays(localToday(), 11), appt_time: '09:00:00', place: 'City Clinic' },
+    ] as Record<string, unknown>[],
     latest: {
       weight: { id: 'r1', pregnancy_id: 'p1', type: 'weight', value_num: 64.2, value_num2: null, value_text: null, taken_at: earlier, logged_by: 'kush' },
       bp: { id: 'r2', pregnancy_id: 'p1', type: 'bp', value_num: 112, value_num2: 74, value_text: null, taken_at: minutesAgo(7 * 24 * 60), logged_by: 'me' },
@@ -81,6 +87,7 @@ jest.mock('@/lib/supabase', () => {
       if (table === 'profiles') return { data: rows.profile, error: null };
       if (table === 'medications') return { data: rows.medications, error: null };
       if (table === 'med_doses') return { data: rows.med_doses, error: null };
+      if (table === 'appointments') return { data: rows.appointments, error: null };
       if (table === 'readings') {
         if (single) return { data: rows.latest[filters.type as string] ?? null, error: null };
         return { data: rows.today, error: null };
@@ -213,5 +220,42 @@ describe('Today', () => {
 
     expect(await screen.findByText('Add the vitamins you take and tick them off here.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Add' })).toBeTruthy();
+  });
+
+  it('lists the tools, opens appointments, and marks the ones that are not built yet', async () => {
+    await render(<TodayScreen />, { wrapper });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Appointments' }));
+    expect(router.push).toHaveBeenCalledWith('/appointments');
+
+    (router.push as jest.Mock).mockClear();
+    await fireEvent.press(screen.getByRole('button', { name: 'Mood & symptoms, coming soon' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Contraction timer, coming soon' }));
+    expect(router.push).not.toHaveBeenCalled();
+    expect(screen.getAllByText('Soon')).toHaveLength(2);
+  });
+
+  it('shows the next appointment that has not happened yet, and opens the calendar from it', async () => {
+    await render(<TodayScreen />, { wrapper });
+
+    const card = await screen.findByRole('link', { name: /^Next appointment: Glucose tolerance test, / });
+    expect(screen.getByText('Next appointment')).toBeTruthy();
+    expect(screen.getByText('Glucose tolerance test')).toBeTruthy();
+    expect(screen.getByText(`City Clinic · ${clock('09:00')}`)).toBeTruthy();
+    expect(screen.queryByText('Booking visit')).toBeNull();
+    expect(screen.queryByText('Routine checkup')).toBeNull();
+
+    (router.push as jest.Mock).mockClear();
+    await fireEvent.press(card);
+    expect(router.push).toHaveBeenCalledWith('/appointments');
+  });
+
+  it('shows no appointment card when nothing is coming up', async () => {
+    mockRows().appointments = mockRows().appointments.filter((a) => a.id === 'a0');
+    await render(<TodayScreen />, { wrapper });
+    await screen.findByText('Hi, Ananya');
+    await screen.findByText('Prenatal multivitamin');
+
+    expect(screen.queryByText('Next appointment')).toBeNull();
+    expect(screen.queryByText('Booking visit')).toBeNull();
   });
 });

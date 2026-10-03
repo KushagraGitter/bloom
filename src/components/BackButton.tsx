@@ -1,21 +1,32 @@
 import { Pressable, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { border, colors, radius, touchTarget } from '@/theme/tokens';
+import { Text } from '@/components/Text';
+import { border, colors, fonts, radius, touchTarget } from '@/theme/tokens';
 
-export function BackButton({ onPress }: { onPress: () => void }) {
+export type BackButtonProps = {
+  onPress: () => void;
+  /** Where it goes ("Today"). Without it the button is just the arrow. */
+  label?: string;
+};
+
+export function BackButton({ onPress, label }: BackButtonProps) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onPress} style={styles.btn}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label ? `Back to ${label}` : 'Back'}
+      onPress={onPress}
+      style={[styles.btn, label ? styles.withLabel : styles.arrowOnly]}>
       <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
         <Path d="M15 6l-6 6 6 6" />
       </Svg>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   btn: {
-    width: touchTarget,
     height: touchTarget,
     borderRadius: radius.button,
     borderWidth: border.width,
@@ -24,4 +35,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  arrowOnly: { width: touchTarget },
+  withLabel: { alignSelf: 'flex-start', flexDirection: 'row', gap: 4, paddingLeft: 8, paddingRight: 14 },
+  label: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
 });
