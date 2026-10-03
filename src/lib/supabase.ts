@@ -17,7 +17,8 @@ export const supabase = createClient(url ?? 'http://localhost:54321', anonKey ??
     storage: Platform.OS === 'web' && typeof window === 'undefined' ? undefined : AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    // Web sign-in returns to /auth/callback?code=…, which the client exchanges.
+    detectSessionInUrl: Platform.OS === 'web',
     // Code exchange (PKCE) for the browser sign-in in src/lib/auth.ts.
     flowType: 'pkce',
   },

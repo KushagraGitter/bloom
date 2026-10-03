@@ -18,11 +18,12 @@ gets a login that sees everything and can log on her behalf.
 src/app/            routes (each design artboard becomes one)
   (auth)/           welcome and Google sign-in
   onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
-  (tabs)/           Today, Meals, Vitamins, Reports, Progress
+  (tabs)/           Today (check-ins, kicks, water), Meals, Vitamins, Reports, Progress
+  profile.tsx       edit details, reminders, units, partner invite code
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
-src/lib/            Supabase client, auth, session, data hooks, onboarding and due-date maths
+src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths
 supabase/
   migrations/       SQL schema and RLS policies
   tests/            RLS checks against a throwaway Postgres
@@ -62,7 +63,7 @@ these on every pull request.
    `https://<project-ref>.supabase.co/auth/v1/callback` as an authorised
    redirect URI on the Google client.
 5. Under Authentication → URL Configuration → Redirect URLs, add `bloom://**`
-   (builds) and `exp://**` (Expo Go).
+   (builds), `exp://**` (Expo Go) and `http://localhost:8081/**` (web dev).
 
 The app signs in through Supabase's hosted Google page in an in-app browser,
 so it needs no Google IDs itself and works in Expo Go.
@@ -78,7 +79,7 @@ sees nothing.
 | `profiles`       | One per login, created automatically on sign-up |
 | `pregnancies`    | LMP date (due date is generated as LMP + 280 days), dating method, health details |
 | `members`        | Who can see a pregnancy: `owner` or `partner` |
-| `invites`        | 6-digit codes, valid 48 hours, single use; redeemed through `accept_invite(code)` |
+| `invites`        | 6-digit codes, valid 48 hours, single use, one unused code per pregnancy; made by `new_invite(pregnancy)`, redeemed through `accept_invite(code)` |
 | `readings`       | Weight, BP, sugar, sleep, kicks and water check-ins, stamped with who logged them |
 | `reminder_prefs` | Per-person reminder settings |
 
