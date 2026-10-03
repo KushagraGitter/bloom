@@ -18,6 +18,7 @@ import { Button, Text } from '@/components';
 import { useMembership } from '@/lib/data';
 import { queryClient } from '@/lib/queryClient';
 import { SessionProvider, useSession } from '@/lib/session';
+import { useReminders } from '@/lib/useReminders';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -53,6 +54,7 @@ export default function RootLayout() {
 function RootNavigator() {
   const { session, loading } = useSession();
   const membership = useMembership();
+  useReminders();
   const signedIn = !!session;
   const ready = !loading && (!signedIn || !membership.isPending);
 

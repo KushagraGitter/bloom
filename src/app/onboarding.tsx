@@ -322,7 +322,7 @@ export default function OnboardingScreen() {
                   </View>
                 ))}
               </Card>
-              <Hint>You can change these any time.</Hint>
+              <Hint>We&apos;ll ask your phone for permission to send notifications next. You can change these any time.</Hint>
               {create.error && (
                 <Card tone={colors.pink} accessibilityLiveRegion="polite">
                   <Text variant="label">Couldn&apos;t save: {create.error.message}</Text>
