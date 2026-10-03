@@ -9,6 +9,7 @@ import type { PregnancyRow } from '@/lib/profile';
 import { CHECKINS, startOfLocalDay, type CheckinType, type Reading } from '@/lib/readings';
 import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
+import type { Dose, Medication, MedicationRow } from '@/lib/vitamins';
 
 export type Pregnancy = PregnancyRow;
 
@@ -25,6 +26,8 @@ export const keys = {
   members: (pregnancyId: string) => ['members', pregnancyId] as const,
   invite: (pregnancyId: string) => ['invite', pregnancyId] as const,
   reminders: (pregnancyId: string, userId: string) => ['reminders', pregnancyId, userId] as const,
+  meds: (pregnancyId: string) => ['meds', pregnancyId] as const,
+  doses: (pregnancyId: string) => ['doses', pregnancyId] as const,
 };
 
 /** The pregnancy the signed-in user belongs to, or null if they haven't set one up or joined one. */
@@ -276,22 +279,34 @@ export function useTally(pregnancyId: string | undefined, type: 'kicks' | 'water
 }
 
 /**
- * Live sync: when either phone logs, edits or removes a reading, refetch.
- * Deletes can't be filtered by pregnancy (only the id is sent), so any delete
- * triggers a refetch; RLS still decides what the refetch returns.
+ * Live sync: when either phone logs, ticks, adds, edits or removes something,
+ * refetch it. One channel covers everything, so call this once, from the tabs
+ * layout, rather than from each screen (a second subscription to the same
+ * channel name would throw).
+ *
+ * Inserts and updates are filtered to this pregnancy. Deletes can't be (only
+ * the id is sent), so any delete triggers a refetch; RLS still decides what
+ * the refetch returns.
  */
-export function useReadingsRealtime(pregnancyId: string | undefined) {
+export function useRealtimeSync(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!pregnancyId) return;
-    const refresh = () => queryClient.invalidateQueries({ queryKey: keys.readings(pregnancyId) });
     const filter = `pregnancy_id=eq.${pregnancyId}`;
-    const channel = supabase
-      .channel(`readings:${pregnancyId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'readings', filter }, refresh)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'readings', filter }, refresh)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'readings' }, refresh)
-      .subscribe();
+    const tables = [
+      ['readings', keys.readings(pregnancyId)],
+      ['medications', keys.meds(pregnancyId)],
+      ['med_doses', keys.doses(pregnancyId)],
+    ] as const;
+    const channel = supabase.channel(`pregnancy:${pregnancyId}`);
+    for (const [table, key] of tables) {
+      const refresh = () => queryClient.invalidateQueries({ queryKey: key });
+      channel
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, refresh)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter }, refresh)
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, refresh);
+    }
+    channel.subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
@@ -438,5 +453,144 @@ export function useSetReminder(pregnancyId: string | undefined) {
     },
     onError: (_e, _v, ctx) => queryClient.setQueryData(key, ctx?.previous),
     onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Vitamins: medications and the days they were taken
+// ---------------------------------------------------------------------------
+
+const MED_COLUMNS = 'id, pregnancy_id, name, dose, time_of_day, start_date, end_date, created_at';
+const DOSE_COLUMNS = 'medication_id, pregnancy_id, day, taken_at, logged_by';
+
+/**
+ * How many recent doses to load. The streak walks back through them, so a
+ * perfect run longer than this many doses is shown as a little shorter than
+ * it is; at six medicines a day that is still about 160 days.
+ */
+const DOSE_LIMIT = 1000;
+
+export function useMedications(pregnancyId: string | undefined) {
+  return useQuery({
+    queryKey: keys.meds(pregnancyId ?? 'none'),
+    enabled: !!pregnancyId,
+    queryFn: async (): Promise<Medication[]> => {
+      const { data, error } = await supabase
+        .from('medications')
+        .select(MED_COLUMNS)
+        .eq('pregnancy_id', pregnancyId!)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Medication[];
+    },
+  });
+}
+
+export function useDoses(pregnancyId: string | undefined) {
+  return useQuery({
+    queryKey: keys.doses(pregnancyId ?? 'none'),
+    enabled: !!pregnancyId,
+    queryFn: async (): Promise<Dose[]> => {
+      const { data, error } = await supabase
+        .from('med_doses')
+        .select(DOSE_COLUMNS)
+        .eq('pregnancy_id', pregnancyId!)
+        .order('day', { ascending: false })
+        .limit(DOSE_LIMIT);
+      if (error) throw error;
+      return (data ?? []) as Dose[];
+    },
+  });
+}
+
+export function useAddMedication(pregnancyId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: MedicationRow) => {
+      const { error } = await supabase.from('medications').insert({ pregnancy_id: pregnancyId!, ...row });
+      if (error) throw error;
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.meds(pregnancyId ?? 'none') }),
+  });
+}
+
+/** Deletes a medicine and, with it, its history. The list updates straight away. */
+export function useRemoveMedication(pregnancyId: string | undefined) {
+  const queryClient = useQueryClient();
+  const medsKey = keys.meds(pregnancyId ?? 'none');
+  const dosesKey = keys.doses(pregnancyId ?? 'none');
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('medications').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onMutate: async (id: string) => {
+      await Promise.all([queryClient.cancelQueries({ queryKey: medsKey }), queryClient.cancelQueries({ queryKey: dosesKey })]);
+      const meds = queryClient.getQueryData<Medication[]>(medsKey);
+      const doses = queryClient.getQueryData<Dose[]>(dosesKey);
+      queryClient.setQueryData<Medication[]>(medsKey, (rows) => rows?.filter((m) => m.id !== id));
+      queryClient.setQueryData<Dose[]>(dosesKey, (rows) => rows?.filter((d) => d.medication_id !== id));
+      return { meds, doses };
+    },
+    onError: (_e, _id, ctx) => {
+      queryClient.setQueryData(medsKey, ctx?.meds);
+      queryClient.setQueryData(dosesKey, ctx?.doses);
+    },
+    onSettled: () => Promise.all([queryClient.invalidateQueries({ queryKey: medsKey }), queryClient.invalidateQueries({ queryKey: dosesKey })]),
+  });
+}
+
+/**
+ * Ticks a dose off for a day, or un-ticks it. The list updates straight away
+ * and is put right if the write fails. Toggles run one after another, so
+ * tapping the same medicine twice quickly can't have its insert and delete
+ * land in the wrong order.
+ */
+export function useToggleDose(pregnancyId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { session } = useSession();
+  const key = keys.doses(pregnancyId ?? 'none');
+  const mutationKey = ['dose', pregnancyId ?? 'none'];
+  return useMutation({
+    mutationKey,
+    scope: { id: `doses:${pregnancyId ?? 'none'}` },
+    mutationFn: async ({ medicationId, day, taken }: { medicationId: string; day: string; taken: boolean }) => {
+      if (taken) {
+        // "Ignore duplicates" so two phones ticking at once leave one row.
+        const { error } = await supabase
+          .from('med_doses')
+          .upsert({ pregnancy_id: pregnancyId!, medication_id: medicationId, day }, { onConflict: 'medication_id,day', ignoreDuplicates: true });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('med_doses').delete().eq('medication_id', medicationId).eq('day', day);
+        if (error) throw error;
+      }
+    },
+    onMutate: async ({ medicationId, day, taken }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<Dose[]>(key);
+      const without = (rows: Dose[]) => rows.filter((d) => !(d.medication_id === medicationId && d.day === day));
+      queryClient.setQueryData<Dose[]>(key, (rows = []) =>
+        taken
+          ? [
+              {
+                medication_id: medicationId,
+                pregnancy_id: pregnancyId!,
+                day,
+                taken_at: new Date().toISOString(),
+                logged_by: session?.user.id ?? null,
+              },
+              ...without(rows),
+            ]
+          : without(rows),
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx) => queryClient.setQueryData(key, ctx?.previous),
+    onSettled: () => {
+      // While more toggles are queued, wait: refetching now would show the
+      // server's state without them and the ticks would flicker back.
+      if (queryClient.isMutating({ mutationKey }) <= 1) queryClient.invalidateQueries({ queryKey: key });
+    },
   });
 }

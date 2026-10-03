@@ -4,6 +4,7 @@ export { Button } from './Button';
 export { Card } from './Card';
 export { Chip } from './Chip';
 export { DateField } from './DateField';
+export { CheckIcon, PillIcon, PlusIcon, TrashIcon } from './icons';
 export { OptionCard } from './OptionCard';
 export { Screen } from './Screen';
 export { TabBar } from './TabBar';
