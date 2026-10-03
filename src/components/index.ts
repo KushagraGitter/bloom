@@ -11,5 +11,6 @@ export { Screen } from './Screen';
 export { TabBar } from './TabBar';
 export { Text } from './Text';
 export { TextField } from './TextField';
+export { TimeField } from './TimeField';
 export { Toggle } from './Toggle';
 export { WhenFields } from './WhenFields';
