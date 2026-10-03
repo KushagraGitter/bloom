@@ -84,6 +84,7 @@ function RootNavigator() {
       </Stack.Protected>
       <Stack.Protected guard={signedIn && hasPregnancy}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="profile" />
         <Stack.Screen name="dev/components" />
       </Stack.Protected>
       <Stack.Screen name="auth/callback" />

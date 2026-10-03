@@ -18,11 +18,12 @@ gets a login that sees everything and can log on her behalf.
 src/app/            routes (each design artboard becomes one)
   (auth)/           welcome and Google sign-in
   onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
-  (tabs)/           Today, Meals, Vitamins, Reports, Progress
+  (tabs)/           Today (check-ins, kicks, water), Meals, Vitamins, Reports, Progress
+  profile.tsx       edit details, reminders, units, partner invite code
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
-src/lib/            Supabase client, auth, session, data hooks, onboarding and due-date maths
+src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths
 supabase/
   migrations/       SQL schema and RLS policies
   tests/            RLS checks against a throwaway Postgres
