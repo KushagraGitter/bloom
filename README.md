@@ -18,12 +18,12 @@ gets a login that sees everything and can log on her behalf.
 src/app/            routes (each design artboard becomes one)
   (auth)/           welcome and Google sign-in
   onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
-  (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment) and Vitamins; Meals, Reports and Progress are placeholders
+  (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment), Vitamins and Meals; Reports and Progress are placeholders
   appointments.tsx  month calendar, what is coming up, book and cancel appointments
   profile.tsx       edit details, reminders, units, partner invite code
   household-key.tsx show the household key as a QR code or recovery phrase, or take it on a new phone
   dev/components    dev-only gallery of the shared components
-src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields
+src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields, VaultGate (what a screen on the phone's records shows until they are open)
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
 src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths, reminders
   vault/            on-phone record store, encryption, household key and encrypted sync
@@ -97,6 +97,45 @@ The app no longer reads or writes the health columns of `pregnancies` or the
 `readings`, `medications`, `med_doses` and `appointments` tables: that data is in
 the vault (see "Health data on the phone" below). The tables stay until the
 household's data has been copied over and they are emptied by hand.
+
+## Meals
+
+Meals keeps its data in the phone's own store (see "Health data on the phone"
+below), so what is typed in never reaches Supabase in a readable form and there
+is no `meals` table. There are three kinds of record, all sealed like any other
+(`src/lib/meals.ts` has their shapes and the parsing, `src/lib/useMeals.ts` the
+hooks):
+
+| Kind         | What it holds |
+| ------------ | ------------- |
+| `meal`       | One per thing eaten: the day, breakfast / snack / lunch / dinner, an optional time, what it was, notes, any nutrient numbers, and who logged it |
+| `meal-goals` | One per household: the five daily goals the bars measure against. Its id comes from the pregnancy id (`stableId`), so both phones write the same record and the newest edit wins |
+| `craving`    | One per craving or aversion; adding one that is already there, in any case, does nothing |
+
+Good to know:
+
+- Calories and the five nutrients (protein, iron, calcium, folate, fibre) are
+  typed in by hand and all optional. The bars add up only what was entered, and
+  say so when nothing has been. There is no photo or AI step yet: "Snap your
+  plate" and "Use a photo" from the design wait for the scanning phase, which is
+  still an open question.
+- The goals start as the numbers in the design (71 g protein, 27 mg iron,
+  1,000 mg calcium, 600 mcg folate, 28 g fibre). They are common starting
+  targets, not advice, and the screen says so. Either of you can enter the ones
+  her doctor gave her, and both phones then use those.
+- The add sheet starts on the usual meal for the time of day (breakfast before
+  11, lunch before 4, a snack before 6, dinner after), or on a snack when that
+  meal is already logged today.
+- The day is the phone's own, and moves on at midnight or when the app comes back
+  to the front.
+- Until a phone has the household key, or on the web, which has no on-phone
+  database, Meals says so (`VaultGate`) and, on a phone, points to Household
+  key. Nothing is read or written until the phone is ready.
+
+The next screens on the store (Progress, Mood and symptoms) can reuse what Meals
+is built from: `src/lib/vault/records.ts` for reading (`useVaultQuery`), saving
+and removing records and making their ids, `VaultGate` for a phone that is not
+ready, and `TimeField` for an optional time.
 
 ## Reminders
 
