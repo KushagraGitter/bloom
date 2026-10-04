@@ -230,7 +230,7 @@ function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string;
   );
 }
 
-/** The design's three tools. The contraction timer isn't built yet, so it is marked as coming. */
+/** The design's three tools. */
 function Tools() {
   return (
     <View style={styles.section}>
@@ -240,7 +240,7 @@ function Tools() {
       <View style={styles.tools}>
         <ToolTile lines={['Mood &', 'symptoms']} tone={colors.pink} icon={<SmileIcon />} onPress={() => router.push('/mood')} />
         <ToolTile lines={['Appointments']} tone={colors.surface} icon={<CalendarIcon />} onPress={() => router.push('/appointments')} />
-        <ToolTile lines={['Contraction', 'timer']} tone={colors.mint} icon={<TimerIcon />} />
+        <ToolTile lines={['Contraction', 'timer']} tone={colors.mint} icon={<TimerIcon />} onPress={() => router.push('/contractions')} />
       </View>
     </View>
   );
@@ -251,17 +251,9 @@ function Tools() {
  * "Appointments" barely room, so the label is given in lines and each one
  * shrinks a little rather than a word breaking in the middle.
  */
-function ToolTile({ lines, tone, icon, onPress }: { lines: string[]; tone: string; icon: ReactNode; onPress?: () => void }) {
-  const label = lines.join(' ');
-  const soon = !onPress;
+function ToolTile({ lines, tone, icon, onPress }: { lines: string[]; tone: string; icon: ReactNode; onPress: () => void }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={soon ? `${label}, coming soon` : label}
-      accessibilityState={{ disabled: soon }}
-      disabled={soon}
-      onPress={onPress}
-      style={[styles.tool, { backgroundColor: tone }, soon && styles.toolSoon]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={lines.join(' ')} onPress={onPress} style={[styles.tool, { backgroundColor: tone }]}>
       {icon}
       <View>
         {lines.map((line) => (
@@ -270,7 +262,6 @@ function ToolTile({ lines, tone, icon, onPress }: { lines: string[]; tone: strin
           </Text>
         ))}
       </View>
-      {soon && <Text style={styles.toolTag}>Soon</Text>}
     </Pressable>
   );
 }
@@ -558,9 +549,7 @@ const styles = StyleSheet.create({
     borderWidth: border.width,
     borderColor: border.color,
   },
-  toolSoon: { opacity: 0.6 },
   toolLabel: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
-  toolTag: { fontFamily: fonts.bodyBold, fontSize: 11, color: colors.inkMuted },
   nextCard: {
     flexDirection: 'row',
     alignItems: 'center',

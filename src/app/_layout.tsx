@@ -92,6 +92,7 @@ function RootNavigator() {
           <Stack.Screen name="profile" />
           <Stack.Screen name="appointments" />
           <Stack.Screen name="mood" />
+          <Stack.Screen name="contractions" />
           <Stack.Screen name="household-key" />
           <Stack.Screen name="dev/components" />
         </Stack.Protected>
