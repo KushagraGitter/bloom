@@ -273,6 +273,16 @@ can still be added by hand. `npm test` covers the function's logic
   forgets the household key, turns the app lock off, clears reminders and
   signs out. If the function can't be reached, nothing is deleted anywhere.
 
+- **Connected health** (`src/lib/health/`, `src/app/connected-health.tsx`):
+  read-only access to Apple Health on iPhone
+  (`@kingstinct/react-native-healthkit`) or Health Connect on Android
+  (`react-native-health-connect`), one switch per metric, kept per phone in
+  SecureStore. `source.ios.ts` and `source.android.ts` load their library on
+  first use and report `needs-build` in Expo Go, which doesn't include them;
+  `source.ts` is the web stub. For now the screen only checks the connection
+  (it counts the last 7 days); nothing is saved. Changing the health libraries
+  or their `app.json` settings needs a new development build.
+
 ### Set up the delete-account function
 
 Deploy it with `npx supabase functions deploy delete-account` (keep JWT

@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Pressable, Share, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -23,6 +23,7 @@ import {
 } from '@/lib/data';
 import { openSystemSettings, sendTestReminder } from '@/lib/notifications';
 import { REMINDERS, toggleCondition } from '@/lib/onboarding';
+import { useHealthSettings } from '@/lib/health/settings';
 import { gestationalAge, localToday } from '@/lib/pregnancy';
 import {
   GROUPS,
@@ -113,6 +114,7 @@ export default function ProfileScreen() {
       <Group title="PRIVACY">
         <Row label="Household key" value={KEY_STATUS[vault.state]} onPress={() => router.push('/household-key')} first />
         <AppLockRow />
+        <HealthRow />
       </Group>
 
       {GROUPS.map((g) => (
@@ -328,6 +330,16 @@ function AppLockRow() {
       <Toggle label="App lock" value={!!enabled} disabled={enabled === null || busy} onValueChange={change} />
     </View>
   );
+}
+
+/** Apple Health or Health Connect: what this phone may read. */
+function HealthRow() {
+  const { metrics, load } = useHealthSettings();
+  useEffect(() => {
+    if (metrics === null) load();
+  }, [metrics, load]);
+  const value = metrics === null ? '' : metrics.length ? `${metrics.length} on` : 'Off';
+  return <Row label="Connected health" value={value} onPress={() => router.push('/connected-health')} />;
 }
 
 /** "Download my data": made on this phone, handed to the share sheet. */
