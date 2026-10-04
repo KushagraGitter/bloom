@@ -54,6 +54,13 @@
           "cameraPermission": "Bloom uses the camera to scan the household code and to take bump photos.",
           "microphonePermission": false
         }
+      ],
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Bloom uses Face ID to keep your health data private when the app lock is on."
+        }
       ]
     ],
     "scheme": "bloom",

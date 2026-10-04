@@ -5,6 +5,7 @@ import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { BackButton, BottomSheet, Button, Card, Chip, DateField, Screen, Text, TextField, Toggle } from '@/components';
+import { authenticate, lockAvailability, useAppLock } from '@/lib/appLock';
 import { signOut } from '@/lib/auth';
 import {
   useCreateInvite,
@@ -105,6 +106,7 @@ export default function ProfileScreen() {
 
       <Group title="PRIVACY">
         <Row label="Household key" value={KEY_STATUS[vault.state]} onPress={() => router.push('/household-key')} first />
+        <AppLockRow />
       </Group>
 
       {GROUPS.map((g) => (
@@ -266,6 +268,50 @@ function PartnerSection({ pregnancyId, ownerId, isOwner }: { pregnancyId: string
           </Text>
         )}
       </Card>
+    </View>
+  );
+}
+
+const LOCK_PROBLEM = {
+  no_hardware: 'This phone has no Face ID, fingerprint or passcode for Bloom to use.',
+  not_enrolled: 'Set up Face ID, a fingerprint or a passcode in your phone’s settings first.',
+  failed: 'The lock is still off: that didn’t unlock.',
+  save: 'Couldn’t change the lock. Try again.',
+} as const;
+
+/** Face ID, fingerprint or passcode before Bloom opens, on this phone only. */
+function AppLockRow() {
+  const { enabled, setEnabled } = useAppLock();
+  const [problem, setProblem] = useState<keyof typeof LOCK_PROBLEM | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const change = async (on: boolean) => {
+    setProblem(null);
+    setBusy(true);
+    try {
+      if (on) {
+        const availability = await lockAvailability();
+        if (availability !== 'ok') return setProblem(availability);
+        // She proves it works before it can lock her out.
+        if (!(await authenticate('Turn on the app lock'))) return setProblem('failed');
+      }
+      await setEnabled(on);
+    } catch {
+      setProblem('save');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={[styles.row, styles.rowDivider]}>
+      <View style={styles.flex}>
+        <Text style={styles.reminderLabel}>App lock</Text>
+        <Text variant="caption">
+          {problem ? LOCK_PROBLEM[problem] : 'Face ID, fingerprint or passcode to open Bloom on this phone'}
+        </Text>
+      </View>
+      <Toggle label="App lock" value={!!enabled} disabled={enabled === null || busy} onValueChange={change} />
     </View>
   );
 }
