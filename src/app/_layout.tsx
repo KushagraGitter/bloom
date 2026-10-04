@@ -105,6 +105,7 @@ function RootNavigator() {
           <Stack.Screen name="mood" />
           <Stack.Screen name="contractions" />
           <Stack.Screen name="household-key" />
+          <Stack.Screen name="connected-health" />
           <Stack.Screen name="dev/components" />
         </Stack.Protected>
         <Stack.Screen name="auth/callback" />
