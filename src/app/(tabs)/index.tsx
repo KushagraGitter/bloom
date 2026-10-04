@@ -230,7 +230,7 @@ function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string;
   );
 }
 
-/** The design's three tools. Only appointments are built so far; the others are marked as coming. */
+/** The design's three tools. The contraction timer isn't built yet, so it is marked as coming. */
 function Tools() {
   return (
     <View style={styles.section}>
@@ -238,7 +238,7 @@ function Tools() {
         Tools
       </Text>
       <View style={styles.tools}>
-        <ToolTile lines={['Mood &', 'symptoms']} tone={colors.pink} icon={<SmileIcon />} />
+        <ToolTile lines={['Mood &', 'symptoms']} tone={colors.pink} icon={<SmileIcon />} onPress={() => router.push('/mood')} />
         <ToolTile lines={['Appointments']} tone={colors.surface} icon={<CalendarIcon />} onPress={() => router.push('/appointments')} />
         <ToolTile lines={['Contraction', 'timer']} tone={colors.mint} icon={<TimerIcon />} />
       </View>

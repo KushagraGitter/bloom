@@ -196,16 +196,17 @@ describe('Today', () => {
     expect(screen.getByRole('link', { name: 'Add' })).toBeTruthy();
   });
 
-  it('lists the tools, opens appointments, and marks the ones that are not built yet', async () => {
+  it('lists the tools, opens appointments and mood, and marks the timer as not built yet', async () => {
     await show();
     await fireEvent.press(await screen.findByRole('button', { name: 'Appointments' }));
     expect(router.push).toHaveBeenCalledWith('/appointments');
+    await fireEvent.press(screen.getByRole('button', { name: 'Mood & symptoms' }));
+    expect(router.push).toHaveBeenLastCalledWith('/mood');
 
     (router.push as jest.Mock).mockClear();
-    await fireEvent.press(screen.getByRole('button', { name: 'Mood & symptoms, coming soon' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Contraction timer, coming soon' }));
     expect(router.push).not.toHaveBeenCalled();
-    expect(screen.getAllByText('Soon')).toHaveLength(2);
+    expect(screen.getAllByText('Soon')).toHaveLength(1);
   });
 
   it('shows the next appointment that has not happened yet, and opens the calendar from it', async () => {

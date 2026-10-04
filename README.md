@@ -18,8 +18,9 @@ gets a login that sees everything and can log on her behalf.
 src/app/            routes (each design artboard becomes one)
   (auth)/           welcome and Google sign-in
   onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
-  (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment), Vitamins and Meals; Reports and Progress are placeholders
+  (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment), Meals, Vitamins and Progress (weekly charts, 7-day averages, bump diary); Reports is a placeholder
   appointments.tsx  month calendar, what is coming up, book and cancel appointments
+  mood.tsx          mood, symptoms and a note, saved as entries with a history (opened from Today's tools)
   profile.tsx       edit details, reminders, units, partner invite code
   household-key.tsx show the household key as a QR code or recovery phrase, or take it on a new phone
   dev/components    dev-only gallery of the shared components
@@ -228,6 +229,10 @@ record the same id on both phones when it must not be doubled. The hooks in
 | `medication`                | medicine | random |
 | `dose`                      | medicine per day ticked | `stableId('dose', medicine, day)` |
 | `appointment`               | appointment | random |
+| `bump-photo`                | bump diary photo: week, day added, a small thumbnail | random |
+| `bump-image`                | the full photo of one `bump-photo` | random |
+| `mood`                      | mood entry: mood, symptoms, note | random |
+| `symptom`                   | symptom she added to the list | random |
 | `meta.copied`               | household, once its old rows are copied | `stableId('copied-old-tables', household)` |
 
 The pregnancy details in the vault are laid over the `pregnancies` row, which
@@ -242,5 +247,14 @@ the old tables as they are.
 
 Without the key (the partner's phone before pairing, or the web build), the
 health screens show a notice instead of data, and reminders wait.
+
+Bump photos are health data too, so they never go to Supabase Storage. The
+phone shrinks each one (1280 px on the long side, JPEG) and keeps it as two
+records, sealed and synced like the rest: a `bump-photo` with a 360 px
+thumbnail, which is all the diary grid reads, and a `bump-image` with the
+photo, read when she opens it. Each is a few hundred KB sealed, well under
+`vault_records`' 2 MB limit, and uploads are split so one request carries at
+most about 3 MB. The photo picker and resizer (`expo-image-picker`,
+`expo-image-manipulator`) are in Expo Go.
 
 Not done yet: key rotation, and emptying the old readable tables.
