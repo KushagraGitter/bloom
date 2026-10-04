@@ -84,3 +84,22 @@ export function TimerIcon({ size = 26, color = colors.ink }: IconProps) {
     </Svg>
   );
 }
+
+/** Arrow out of a tray, from the design's "Upload a report". */
+export function UploadIcon({ size = 24, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
+    </Svg>
+  );
+}
+
+/** A page with lines, from the design's Reports tab. */
+export function ReportIcon({ size = 22, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <Path d="M14 3v5h5M9 13h6M9 17h4" />
+    </Svg>
+  );
+}

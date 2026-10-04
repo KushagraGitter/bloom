@@ -450,6 +450,25 @@ delete from public.pregnancies where id = (select pregnancy_id from vault_other)
 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 
+-- Daily scan allowance -------------------------------------------------------
+select pg_temp.check((select public.claim_scan((select pregnancy_id from ids), 2)), 'owner takes a scan from the allowance');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
+select pg_temp.check((select public.claim_scan((select pregnancy_id from ids), 2)), 'partner takes the second scan');
+select pg_temp.check((select not public.claim_scan((select pregnancy_id from ids), 2)), 'a third scan is refused once the allowance is used');
+select pg_temp.check((select not public.claim_scan((select pregnancy_id from ids), 0)), 'a zero allowance refuses every scan');
+select pg_temp.check((select count(*) = 0 from public.scan_usage), 'nobody reads the scan counts directly');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000c');
+select pg_temp.rejects(
+  $q$select public.claim_scan((select pregnancy_id from ids), 50)$q$,
+  '42501', 'a stranger taking a scan from her allowance');
+select pg_temp.rejects(
+  $q$insert into public.scan_usage (pregnancy_id, day, count) select pregnancy_id, current_date, 0 from ids$q$,
+  '42501', 'writing scan counts directly');
+reset role;
+select pg_temp.check((select count = 2 from public.scan_usage), 'the refused scan was not counted');
+set role authenticated;
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+
 -- Expired invites -------------------------------------------------------------
 reset role;
 delete from public.invites where accepted_by is null;
@@ -493,6 +512,15 @@ begin
   raise exception 'FAILED: anon could call accept_invite';
 exception when insufficient_privilege then
   raise notice 'ok: signed-out client cannot redeem invites';
+end;
+$$;
+
+do $$
+begin
+  perform public.claim_scan(gen_random_uuid(), 50);
+  raise exception 'FAILED: anon could call claim_scan';
+exception when insufficient_privilege then
+  raise notice 'ok: signed-out client cannot take scans';
 end;
 $$;
 

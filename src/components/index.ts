@@ -4,7 +4,7 @@ export { Button } from './Button';
 export { Card } from './Card';
 export { Chip } from './Chip';
 export { DateField } from './DateField';
-export { CalendarIcon, CheckIcon, ChevronIcon, CrossIcon, PillIcon, PlusIcon, SmileIcon, TimerIcon, TrashIcon } from './icons';
+export { CalendarIcon, CheckIcon, ChevronIcon, CrossIcon, PillIcon, PlusIcon, ReportIcon, SmileIcon, TimerIcon, TrashIcon, UploadIcon } from './icons';
 export { OptionCard } from './OptionCard';
 export { QrCode } from './QrCode';
 export { Screen } from './Screen';
