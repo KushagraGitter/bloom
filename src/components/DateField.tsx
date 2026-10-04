@@ -1,9 +1,10 @@
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 
 import { Text } from '@/components/Text';
-import { border, colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 export type DateFieldProps = {
   label: string;
@@ -31,6 +32,8 @@ function display(value: string): string {
 
 /** A field that opens the platform date picker (dialog on Android, inline calendar on iOS). */
 export function DateField({ label, value, onChange }: DateFieldProps) {
+  const styles = useStyles();
+  const { colors, scheme } = useTheme();
   const [open, setOpen] = useState(false);
 
   const handle = (event: DateTimePickerEvent, date?: Date) => {
@@ -54,14 +57,15 @@ export function DateField({ label, value, onChange }: DateFieldProps) {
           mode="date"
           display={Platform.OS === 'ios' ? 'inline' : 'default'}
           onChange={handle}
-          accentColor={colors.purple}
+          accentColor={colors.link}
+          themeVariant={scheme}
         />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   wrap: { gap: 6 },
   field: {
     height: 52,
@@ -74,4 +78,4 @@ const styles = StyleSheet.create({
   },
   value: { fontFamily: fonts.body, fontSize: 17, color: colors.ink },
   placeholder: { color: colors.inkMuted },
-});
+}));

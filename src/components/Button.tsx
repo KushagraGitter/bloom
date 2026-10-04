@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Text } from '@/components/Text';
-import { border, colors, fonts, radius, shadow, touchTarget } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius, touchTarget } from '@/theme/tokens';
 
 export type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   label: string;
@@ -10,6 +11,8 @@ export type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
 };
 
 export function Button({ label, variant = 'light', style, disabled, ...rest }: ButtonProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const dark = variant !== 'light';
   return (
     <Pressable
@@ -30,7 +33,7 @@ export function Button({ label, variant = 'light', style, disabled, ...rest }: B
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ border, shadow }) => ({
   base: {
     minHeight: 48,
     minWidth: touchTarget,
@@ -56,4 +59,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
-});
+}));

@@ -1,12 +1,13 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useCallback, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Platform, Pressable, View } from 'react-native';
 
 import { CrossIcon } from '@/components/icons';
 import { Text } from '@/components/Text';
 import { clock, dayLong, localTime } from '@/lib/appointments';
 import { localToday as dayOf } from '@/lib/pregnancy';
-import { border, colors, fonts, radius, touchTarget } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius, touchTarget } from '@/theme/tokens';
 
 export type WhenFieldsProps = {
   /** `YYYY-MM-DD`. */
@@ -39,6 +40,8 @@ function todayAt(time: string): Date {
  * again.
  */
 export function WhenFields({ date, time, onDateChange, onTimeChange }: WhenFieldsProps) {
+  const styles = useStyles();
+  const { colors, scheme } = useTheme();
   const [open, setOpen] = useState<'date' | 'time' | null>(null);
   const android = Platform.OS === 'android';
 
@@ -113,8 +116,8 @@ export function WhenFields({ date, time, onDateChange, onTimeChange }: WhenField
           display={Platform.OS === 'ios' ? 'inline' : 'default'}
           onValueChange={pickDate}
           onDismiss={dismiss}
-          accentColor={colors.purple}
-          themeVariant="light"
+          accentColor={colors.link}
+          themeVariant={scheme}
         />
       )}
       {open === 'time' && (
@@ -124,15 +127,15 @@ export function WhenFields({ date, time, onDateChange, onTimeChange }: WhenField
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onValueChange={pickTime}
           onDismiss={dismiss}
-          accentColor={colors.purple}
-          themeVariant="light"
+          accentColor={colors.link}
+          themeVariant={scheme}
         />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   wrap: { gap: 6 },
   row: { flexDirection: 'row', gap: 10 },
   column: { flex: 1, gap: 6 },
@@ -151,4 +154,4 @@ const styles = StyleSheet.create({
   placeholder: { color: colors.inkMuted },
   // Reaches the field's full height and the 44pt minimum, though the cross itself is small.
   clear: { width: touchTarget, height: '100%', alignItems: 'center', justifyContent: 'center' },
-});
+}));

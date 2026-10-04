@@ -13,7 +13,7 @@ import { readyVault } from '@/lib/vault/testHelpers';
 import { vaultWrapper } from '@/lib/vault/testWrapper';
 import { vaultKey } from '@/lib/vault/useVaultSync';
 import type { Vault } from '@/lib/vault/VaultProvider';
-import { colors } from '@/theme/tokens';
+import { accents as colors } from '@/theme/tokens';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));

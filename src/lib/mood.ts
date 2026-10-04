@@ -4,7 +4,7 @@
  */
 
 import { addDays, localToday } from '@/lib/pregnancy';
-import { colors } from '@/theme/tokens';
+import { accents } from '@/theme/tokens';
 
 export const ENTRY_KIND = 'mood';
 export const SYMPTOM_KIND = 'symptom';
@@ -13,11 +13,11 @@ export type MoodKey = 'great' | 'good' | 'okay' | 'low' | 'rough';
 
 /** The five faces, best first, with the design's fills and mouths. */
 export const MOODS: { key: MoodKey; label: string; tone: string; mouth: string }[] = [
-  { key: 'great', label: 'Great', tone: colors.mint, mouth: 'M7.5 14c1.2 2.5 2.8 3.5 4.5 3.5s3.3-1 4.5-3.5' },
-  { key: 'good', label: 'Good', tone: '#C9F0DC', mouth: 'M8.5 15c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8' },
-  { key: 'okay', label: 'Okay', tone: colors.yellow, mouth: 'M8.5 15.5h7' },
-  { key: 'low', label: 'Low', tone: colors.pink, mouth: 'M8.5 16.5c1-1.2 2.2-1.8 3.5-1.8s2.5.6 3.5 1.8' },
-  { key: 'rough', label: 'Rough', tone: colors.orange, mouth: 'M7.5 17.5c1.2-2.5 2.8-3.5 4.5-3.5s3.3 1 4.5 3.5' },
+  { key: 'great', label: 'Great', tone: accents.mint, mouth: 'M7.5 14c1.2 2.5 2.8 3.5 4.5 3.5s3.3-1 4.5-3.5' },
+  { key: 'good', label: 'Good', tone: accents.mintSoft, mouth: 'M8.5 15c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8' },
+  { key: 'okay', label: 'Okay', tone: accents.yellow, mouth: 'M8.5 15.5h7' },
+  { key: 'low', label: 'Low', tone: accents.pink, mouth: 'M8.5 16.5c1-1.2 2.2-1.8 3.5-1.8s2.5.6 3.5 1.8' },
+  { key: 'rough', label: 'Rough', tone: accents.orange, mouth: 'M7.5 17.5c1.2-2.5 2.8-3.5 4.5-3.5s3.3 1 4.5 3.5' },
 ];
 
 export const moodOf = (key: string) => MOODS.find((m) => m.key === key);

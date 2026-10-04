@@ -7,3 +7,9 @@ import { configure } from '@testing-library/react-native/pure';
 // membership query) even though nothing is wrong. Tests that pass finish
 // early, so a longer limit only slows a test that is really failing.
 configure({ asyncUtilTimeout: 20000 });
+
+// The theme provider saves the Light / Dark / System choice with AsyncStorage,
+// whose native module doesn't exist under jest.
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Image, Pressable, TextInput, View } from 'react-native';
 
 import {
   BottomSheet,
@@ -59,12 +59,15 @@ import {
   type TimeOfDay,
   type WeekDot,
 } from '@/lib/vitamins';
-import { border, colors, fonts, radius, shadow } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { accents, fonts, radius } from '@/theme/tokens';
 
 /** Pill colours from the design, picked per medicine so both phones agree. */
-const TINTS = [colors.pink, colors.mint, colors.orange, colors.yellow, colors.lilac];
+const TINTS = [accents.pink, accents.mint, accents.orange, accents.yellow, accents.lilac];
 
 export default function VitaminsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session } = useSession();
   const membership = useMembership();
   const pregnancy = membership.data?.pregnancy;
@@ -119,7 +122,7 @@ export default function VitaminsScreen() {
           </Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Add medicine" onPress={openAdd} style={styles.addButton}>
-          <PlusIcon />
+          <PlusIcon color={accents.onAccent} />
         </Pressable>
       </View>
 
@@ -199,7 +202,7 @@ export default function VitaminsScreen() {
       )}
       {added && (
         <View accessibilityRole="alert" style={styles.added}>
-          <CheckIcon />
+          <CheckIcon color={accents.onAccent} />
           <Text style={styles.addedText}>{added}</Text>
         </View>
       )}
@@ -235,6 +238,8 @@ export default function VitaminsScreen() {
 }
 
 function StreakCard({ done, total, streak, week }: { done: number; total: number; streak: number; week: WeekDot[] }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Card tone={colors.yellow} size="panel" elevation="lg" style={styles.streakCard}>
       <View style={styles.ring} accessible accessibilityLabel={`${done} of ${total} taken today`}>
@@ -274,6 +279,8 @@ function MedRow({
   onToggle: () => void;
   onRemove: () => void;
 }) {
+  const styles = useStyles();
+  const { colors, shadow } = useTheme();
   const isTaken = !!dose;
   const line = doseLine(med);
   return (
@@ -285,7 +292,7 @@ function MedRow({
         onPress={onToggle}
         style={[styles.medCard, isTaken ? styles.medCardTaken : { boxShadow: shadow.md }]}>
         <View style={[styles.pill, { backgroundColor: TINTS[tintIndex(med.id, TINTS.length)] }]}>
-          <PillIcon />
+          <PillIcon color={accents.onAccent} />
         </View>
         <View style={styles.medText}>
           <Text style={styles.medName} numberOfLines={2}>
@@ -323,6 +330,7 @@ function AddSheet({
   today: string;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const add = useAddMedication(pregnancyId);
   const [name, setName] = useState('');
   const [dose, setDose] = useState('');
@@ -393,6 +401,8 @@ function RxSheet({
   onByHand: () => void;
   onAdded: (count: number) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const scan = useScanPrescription();
   const add = useAddMedications(pregnancyId);
   const [items, setItems] = useState<RxItem[]>([]);
@@ -507,7 +517,7 @@ function RxSheet({
             accessibilityLabel={`Include ${item.name || 'this medicine'}`}
             onPress={() => set(i, { on: !item.on })}
             style={[styles.rxBox, item.on && styles.rxBoxOn]}>
-            {item.on && <CheckIcon />}
+            {item.on && <CheckIcon color={accents.onAccent} />}
           </Pressable>
           <View style={styles.rxFields}>
             <TextInput
@@ -578,7 +588,7 @@ function RxSheet({
 
 const DOT = 20;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border, shadow }) => ({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   headerText: { gap: 2, flexShrink: 1 },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 14 },
@@ -598,22 +608,22 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.paper,
     borderWidth: border.width,
-    borderColor: border.color,
+    borderColor: colors.onAccent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringNum: { fontFamily: fonts.display, fontSize: 30, lineHeight: 32, color: colors.ink },
-  ringLabel: { fontFamily: fonts.bodyHeavy, fontSize: 11, color: colors.ink },
+  ringNum: { fontFamily: fonts.display, fontSize: 30, lineHeight: 32, color: colors.onAccent },
+  ringLabel: { fontFamily: fonts.bodyHeavy, fontSize: 11, color: colors.onAccent },
   streakText: { flex: 1, gap: 8 },
-  streakTitle: { fontFamily: fonts.display, fontSize: 20, lineHeight: 23, color: colors.ink },
+  streakTitle: { fontFamily: fonts.display, fontSize: 20, lineHeight: 23, color: colors.onAccent },
   week: { flexDirection: 'row', gap: 6 },
   dayCol: { alignItems: 'center', gap: 4 },
   dotSlot: { width: DOT, height: DOT },
-  dot: { width: DOT, height: DOT, borderRadius: DOT / 2, borderWidth: border.width, borderColor: border.color },
-  dotDone: { backgroundColor: colors.ink },
-  dotToday: { backgroundColor: colors.surface },
+  dot: { width: DOT, height: DOT, borderRadius: DOT / 2, borderWidth: border.width, borderColor: colors.onAccent },
+  dotDone: { backgroundColor: colors.onAccent },
+  dotToday: { backgroundColor: colors.paper },
   // The design circles today's dot with a ring that sits in the gaps either side.
   todayRing: {
     position: 'absolute',
@@ -623,9 +633,9 @@ const styles = StyleSheet.create({
     height: DOT + 8,
     borderRadius: (DOT + 8) / 2,
     borderWidth: border.width,
-    borderColor: border.color,
+    borderColor: colors.onAccent,
   },
-  dayLabel: { fontFamily: fonts.bodyBold, fontSize: 11, color: colors.ink },
+  dayLabel: { fontFamily: fonts.bodyBold, fontSize: 11, color: colors.onAccent },
   group: { gap: 10 },
   groupTitle: { fontFamily: fonts.display, fontSize: 18, color: colors.ink },
   medRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
@@ -666,7 +676,7 @@ const styles = StyleSheet.create({
   },
   statusTake: { backgroundColor: colors.yellow },
   statusTaken: { backgroundColor: colors.ink },
-  statusText: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
+  statusText: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.onAccent },
   trash: {
     width: 44,
     borderRadius: 14,
@@ -703,7 +713,7 @@ const styles = StyleSheet.create({
     borderColor: border.color,
     backgroundColor: colors.mint,
   },
-  addedText: { flex: 1, fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
+  addedText: { flex: 1, fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.onAccent },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   preview: {
     width: 84,
@@ -730,7 +740,7 @@ const styles = StyleSheet.create({
     borderColor: border.color,
     backgroundColor: colors.yellow,
   },
-  aiBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 12, color: colors.ink },
+  aiBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 12, color: colors.onAccent },
   failure: { gap: 12 },
   unreadable: { gap: 2, padding: 12, borderRadius: 16, backgroundColor: colors.line },
   unreadableTitle: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.ink },
@@ -769,4 +779,4 @@ const styles = StyleSheet.create({
   rxDose: { fontSize: 14 },
   daysRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   daysInput: { width: 52, fontSize: 15, textAlign: 'center' },
-});
+}));

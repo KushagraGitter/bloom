@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { Text } from '@/components/Text';
-import { border, colors, fonts, radius, touchTarget } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius, touchTarget } from '@/theme/tokens';
 
 export type BackButtonProps = {
   onPress: () => void;
@@ -11,6 +12,8 @@ export type BackButtonProps = {
 };
 
 export function BackButton({ onPress, label }: BackButtonProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -25,7 +28,7 @@ export function BackButton({ onPress, label }: BackButtonProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   btn: {
     height: touchTarget,
     borderRadius: radius.button,
@@ -38,4 +41,4 @@ const styles = StyleSheet.create({
   arrowOnly: { width: touchTarget },
   withLabel: { alignSelf: 'flex-start', flexDirection: 'row', gap: 4, paddingLeft: 8, paddingRight: 14 },
   label: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
-});
+}));

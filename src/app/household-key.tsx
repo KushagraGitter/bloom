@@ -7,7 +7,8 @@ import { BackButton, Button, Card, QrCode, Screen, Text, TextField } from '@/com
 import { QR_PREFIX } from '@/lib/vault/householdKey';
 import { fromRecoveryPhrase, RecoveryPhraseError, toRecoveryPhrase } from '@/lib/vault/keys';
 import { useVault } from '@/lib/vault/VaultProvider';
-import { colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 /**
  * The household key: health data is encrypted with it, and only phones that
@@ -16,6 +17,7 @@ import { colors, fonts, radius } from '@/theme/tokens';
  * safe); a phone that doesn't is given it here.
  */
 export default function HouseholdKeyScreen() {
+  const styles = useStyles();
   const vault = useVault();
 
   return (
@@ -44,6 +46,7 @@ export default function HouseholdKeyScreen() {
 }
 
 function ShowKey() {
+  const styles = useStyles();
   const { householdKey } = useVault();
   const [showing, setShowing] = useState<'qr' | 'phrase' | null>(null);
   if (!householdKey) return null;
@@ -88,6 +91,7 @@ function ShowKey() {
 }
 
 function GetKey() {
+  const styles = useStyles();
   const vault = useVault();
   const [mode, setMode] = useState<'choose' | 'scan' | 'type'>('choose');
   const [phrase, setPhrase] = useState('');
@@ -185,7 +189,7 @@ function GetKey() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   card: { gap: 12 },
   qr: { alignItems: 'center', gap: 12 },
   phrase: {
@@ -203,4 +207,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
   },
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
-});
+}));

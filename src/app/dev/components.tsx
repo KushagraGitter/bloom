@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 
 import { BottomSheet, Button, Card, Chip, Screen, Text, Toggle } from '@/components';
-import { border, colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 const METHODS = ['Last period', 'Due date', 'IVF transfer'];
 
 /** Development-only gallery of the shared components, to compare against the design canvas. */
 export default function ComponentGallery() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [method, setMethod] = useState(METHODS[0]);
   const [water, setWater] = useState(true);
   const [sheet, setSheet] = useState(false);
@@ -75,7 +78,7 @@ export default function ComponentGallery() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   grid: { flexDirection: 'row', gap: 12 },
   cell: { flex: 1, gap: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -94,4 +97,4 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: 'row', gap: 10 },
   flex: { flex: 1 },
-});
+}));

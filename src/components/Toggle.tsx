@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
-import { border, colors } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
 
 export type ToggleProps = {
   value: boolean;
@@ -15,6 +15,8 @@ const KNOB = 24;
 const PAD = 2;
 
 export function Toggle({ value, onValueChange, label, disabled }: ToggleProps) {
+  const styles = useStyles();
+  const { colors, border } = useTheme();
   return (
     <Pressable
       accessibilityRole="switch"
@@ -29,7 +31,7 @@ export function Toggle({ value, onValueChange, label, disabled }: ToggleProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   track: {
     width: TRACK_W,
     height: 32,
@@ -48,4 +50,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
-});
+}));
