@@ -1,6 +1,6 @@
 import { newHouseholdKey, seal, VaultDecryptError, type HouseholdKey } from '@/lib/vault/crypto';
 import { createLocalStoreAsync, deleteRecord, writeRecord, type LocalStore } from '@/lib/vault/localStore';
-import { PULL_OVERLAP, PULL_PAGE, syncOnce, type VaultRemote } from '@/lib/vault/sync';
+import { PULL_OVERLAP, PULL_PAGE, PUSH_BYTES, syncOnce, type VaultRemote } from '@/lib/vault/sync';
 import { fromBase64 } from '@/lib/vault/base64';
 import { fakeServer, latin1, memoryDb } from '@/lib/vault/testHelpers';
 
@@ -144,5 +144,41 @@ describe('syncOnce', () => {
     };
     await expect(syncOnce({ store: hers.store, remote: offline, key: newHouseholdKey(), pregnancyId: P })).rejects.toThrow('Network');
     expect(await hers.store.dirty(P)).toHaveLength(1);
+  });
+
+  it('splits big uploads, like a few photos, into several requests', async () => {
+    const { server, hers, his } = await household();
+    const pushes: number[] = [];
+    const push = server.remote.push;
+    server.remote.push = async (rows) => {
+      pushes.push(rows.reduce((n, r) => n + r.ciphertext.length, 0));
+      return push(rows);
+    };
+    const photo = 'x'.repeat(PUSH_BYTES / 3);
+    for (const id of ['a', 'b', 'c', 'd']) await write(hers.store, id, { jpeg: photo }, '2026-10-04T10:00:00Z', 'bump-image');
+    await write(hers.store, 'e', { v: 1 }, '2026-10-04T10:00:00Z');
+
+    expect(await hers.sync()).toEqual({ pushed: 5, pulled: 0 });
+    expect(pushes).toHaveLength(2);
+    for (const size of pushes) expect(size).toBeLessThanOrEqual(PUSH_BYTES);
+    expect(await hers.store.dirty(P)).toEqual([]);
+    expect(await his.sync()).toEqual({ pushed: 0, pulled: 5 });
+    expect((await his.store.list(P, 'bump-image')).map((r) => r.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('still sends a record bigger than the cap, on its own', async () => {
+    const { server, hers } = await household();
+    const sizes: number[] = [];
+    const push = server.remote.push;
+    server.remote.push = async (rows) => {
+      sizes.push(rows.length);
+      return push(rows);
+    };
+    await write(hers.store, 'a', { v: 1 }, '2026-10-04T10:00:00Z');
+    await write(hers.store, 'b', { jpeg: 'x'.repeat(PUSH_BYTES) }, '2026-10-04T10:00:01Z');
+    await write(hers.store, 'c', { v: 2 }, '2026-10-04T10:00:02Z');
+    await hers.sync();
+    expect(sizes).toEqual([1, 1, 1]);
+    expect(server.rows.size).toBe(3);
   });
 });

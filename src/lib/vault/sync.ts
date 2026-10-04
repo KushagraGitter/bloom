@@ -23,6 +23,8 @@ export type VaultRemote = {
 type Payload = { kind: string; data: unknown; deleted: boolean; updatedAt: string };
 
 export const PUSH_BATCH = 200;
+/** Most sealed characters sent in one upload, so a few photos don't make one huge request. */
+export const PUSH_BYTES = 3_000_000;
 export const PULL_PAGE = 500;
 /**
  * Pulls start this many seqs before the last one seen. A write that took its
@@ -59,24 +61,34 @@ export async function syncOnce({
 
 async function push(store: LocalStore, remote: VaultRemote, key: HouseholdKey, pregnancyId: string): Promise<number> {
   const dirty = await store.dirty(pregnancyId);
-  for (let i = 0; i < dirty.length; i += PUSH_BATCH) {
-    const batch = dirty.slice(i, i + PUSH_BATCH);
-    await remote.push(
-      batch.map((record) => {
-        const payload: Payload = { kind: record.kind, data: record.data, deleted: record.deleted, updatedAt: record.updatedAt };
-        const sealed = seal(key, { pregnancyId, id: record.id }, payload);
-        return {
-          id: record.id,
-          pregnancy_id: pregnancyId,
-          key_version: key.version,
-          nonce: sealed.nonce,
-          ciphertext: sealed.ciphertext,
-          client_updated_at: record.updatedAt,
-        };
-      }),
-    );
-    for (const record of batch) await store.markClean(record.id, record.updatedAt);
+  let batch: { record: (typeof dirty)[number]; row: Omit<RemoteRecord, 'seq'> }[] = [];
+  let bytes = 0;
+  const send = async () => {
+    if (batch.length === 0) return;
+    await remote.push(batch.map((b) => b.row));
+    for (const { record } of batch) await store.markClean(record.id, record.updatedAt);
+    batch = [];
+    bytes = 0;
+  };
+  for (const record of dirty) {
+    const payload: Payload = { kind: record.kind, data: record.data, deleted: record.deleted, updatedAt: record.updatedAt };
+    const sealed = seal(key, { pregnancyId, id: record.id }, payload);
+    // A bump photo is a few hundred KB sealed, so a batch is also capped by size.
+    if (batch.length > 0 && (batch.length >= PUSH_BATCH || bytes + sealed.ciphertext.length > PUSH_BYTES)) await send();
+    batch.push({
+      record,
+      row: {
+        id: record.id,
+        pregnancy_id: pregnancyId,
+        key_version: key.version,
+        nonce: sealed.nonce,
+        ciphertext: sealed.ciphertext,
+        client_updated_at: record.updatedAt,
+      },
+    });
+    bytes += sealed.ciphertext.length;
   }
+  await send();
   return dirty.length;
 }
 

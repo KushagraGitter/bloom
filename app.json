@@ -46,7 +46,15 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Bloom lets you add bump photos from your library. They are locked with your household key before they leave the phone.",
+          "cameraPermission": "Bloom uses the camera to scan the household code and to take bump photos.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "scheme": "bloom",
     "experiments": {

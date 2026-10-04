@@ -91,6 +91,7 @@ function RootNavigator() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="profile" />
           <Stack.Screen name="appointments" />
+          <Stack.Screen name="mood" />
           <Stack.Screen name="household-key" />
           <Stack.Screen name="dev/components" />
         </Stack.Protected>
