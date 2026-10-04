@@ -204,6 +204,26 @@ describe('handleScan', () => {
     expect(await run(body(), apiDown)).toEqual({ status: 502, json: { error: 'ai_failed' } });
   });
 
+  it('logs why a scan failed, without the report', async () => {
+    const log = jest.fn();
+    const apiError = Object.assign(new Error('Your credit balance is too low'), {
+      status: 400,
+      error: { type: 'error', error: { type: 'invalid_request_error' } },
+    });
+    const d = deps({ log, callClaude: jest.fn(async () => Promise.reject(apiError)) });
+    expect(await run(body(), d)).toEqual({ status: 502, json: { error: 'ai_failed' } });
+    expect(log).toHaveBeenCalledWith('Claude call failed: 400 invalid_request_error Your credit balance is too low');
+    expect(log.mock.calls.flat().join(' ')).not.toContain(body().file.data);
+
+    const cut = deps({ log, callClaude: jest.fn(async () => answer(GOOD, 'max_tokens')) });
+    expect(await run(body(), cut)).toEqual({ status: 502, json: { error: 'ai_failed' } });
+    expect(log).toHaveBeenLastCalledWith('Claude answer not usable: stop_reason=max_tokens');
+
+    const dbDown = deps({ log, claimScan: jest.fn(async () => Promise.reject(new TypeError('fetch failed'))) });
+    await run(body(), dbDown);
+    expect(log).toHaveBeenLastCalledWith('claim_scan failed: TypeError fetch failed');
+  });
+
   it('reports a refusal as unreadable', async () => {
     const d = deps({ callClaude: jest.fn(async () => answer(GOOD, 'refusal')) });
     expect(await run(body(), d)).toEqual({ status: 422, json: { error: 'unreadable' } });
