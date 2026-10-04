@@ -1,10 +1,15 @@
 /** @jest-environment node */
 import {
   MAX_BASE64_LENGTH,
+  MEAL_SCHEMA,
+  REPORT_SCHEMA,
+  RX_SCHEMA,
   ScanError,
   buildClaudeRequest,
   handleScan,
   parseClaudeResponse,
+  parseMealResponse,
+  parseRxResponse,
   parseScanRequest,
   type ClaudeResponse,
   type ScanDeps,
@@ -67,7 +72,8 @@ describe('parseScanRequest', () => {
   });
 
   it.each([
-    ['another kind', body({ kind: 'meal' })],
+    ['another kind', body({ kind: 'pills' })],
+    ['a meal sent as a PDF', body({ kind: 'meal', file: { mediaType: 'application/pdf', data: 'JVBERi0=' } })],
     ['a bad pregnancy id', body({ pregnancyId: 'abc' })],
     ['an unknown file type', body({ file: { mediaType: 'image/gif', data: 'aGVsbG8=' } })],
     ['an empty file', body({ file: { mediaType: 'image/jpeg', data: '' } })],
@@ -75,6 +81,11 @@ describe('parseScanRequest', () => {
     ['no body', null],
   ])('refuses %s', (_, b) => {
     expect(() => parseScanRequest(b)).toThrow(new ScanError('bad_request'));
+  });
+
+  it('accepts a meal photo and a prescription', () => {
+    expect(parseScanRequest(body({ kind: 'meal' })).kind).toBe('meal');
+    expect(parseScanRequest(body({ kind: 'rx', file: { mediaType: 'application/pdf', data: 'JVBERi0=' } })).kind).toBe('rx');
   });
 
   it('refuses a file over the size limit', () => {
@@ -102,6 +113,93 @@ describe('buildClaudeRequest', () => {
     const r = buildClaudeRequest(parseScanRequest(body({ file: { mediaType: 'application/pdf', data: 'JVBERi0=' }, week: null })), 'm');
     expect(r.messages[0].content[0]).toEqual({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' } });
     expect(r.messages[0].content[1]).toEqual({ type: 'text', text: 'Her pregnancy week today is not known. Read this report.' });
+  });
+});
+
+describe('buildClaudeRequest for each kind', () => {
+  it.each([
+    ['report', REPORT_SCHEMA, 'Read this report.', 'health reports'],
+    ['meal', MEAL_SCHEMA, 'What is on this plate?', 'photo of a meal'],
+    ['rx', RX_SCHEMA, 'Read this prescription.', 'prescription'],
+  ])('asks about a %s with its own schema and prompt', (kind, schema, ask, words) => {
+    const r = buildClaudeRequest(parseScanRequest(body({ kind })), 'm');
+    expect(r.output_config.format.schema).toBe(schema);
+    expect(r.system).toContain(words);
+    expect(r.messages[0].content[1]).toEqual({ type: 'text', text: `She is in week 24 of her pregnancy today. ${ask}` });
+  });
+});
+
+describe('parseMealResponse', () => {
+  it('keeps each named item with sensible estimates, and nulls the rest', () => {
+    const draft = parseMealResponse(
+      answer({
+        items: [
+          { name: ' Dal  tadka ', portion: '1 bowl', kcal: 180, protein_g: 9, iron_mg: 2.1, calcium_mg: 40, folate_mcg: 90, fibre_g: 4 },
+          { name: 'Roti', portion: '2', kcal: -5, protein_g: 'lots', iron_mg: null, calcium_mg: 1e9, folate_mcg: 30, fibre_g: 3 },
+          { name: '', portion: '1', kcal: 10 },
+          'rice',
+        ],
+        confidence: 'very',
+        unreadable_lines: ['Something under the foil'],
+      }),
+    );
+    expect(draft.items).toEqual([
+      { name: 'Dal tadka', portion: '1 bowl', kcal: 180, protein_g: 9, iron_mg: 2.1, calcium_mg: 40, folate_mcg: 90, fibre_g: 4 },
+      { name: 'Roti', portion: '2', kcal: null, protein_g: null, iron_mg: null, calcium_mg: null, folate_mcg: 30, fibre_g: 3 },
+    ]);
+    expect(draft.confidence).toBe('low');
+    expect(draft.unreadable_lines).toEqual(['Something under the foil']);
+  });
+
+  it('keeps a high or medium confidence', () => {
+    expect(parseMealResponse(answer({ items: [], confidence: 'high', unreadable_lines: [] })).confidence).toBe('high');
+    expect(parseMealResponse(answer({ items: [], confidence: 'medium', unreadable_lines: [] })).confidence).toBe('medium');
+  });
+
+  it('fails like a report does', () => {
+    expect(() => parseMealResponse(answer({}, 'refusal'))).toThrow(new ScanError('unreadable'));
+    expect(() => parseMealResponse({ stop_reason: 'end_turn', content: [{ type: 'text', text: '[]' }] })).toThrow(new ScanError('ai_failed'));
+  });
+});
+
+describe('parseRxResponse', () => {
+  it('keeps each medicine, fixing an odd time, duration or date', () => {
+    const draft = parseRxResponse(
+      answer({
+        doctor: 'Dr  Rao',
+        date: '2026-09-28',
+        meds: [
+          {
+            name: 'Ferrous ascorbate',
+            strength: '100 mg',
+            dose: '1 tablet',
+            frequency: 'OD',
+            time_of_day: 'afternoon',
+            duration_days: 90,
+            instructions: 'after food',
+          },
+          { name: 'Calcium', strength: '', dose: '1 tab', frequency: 'HS', time_of_day: 'night', duration_days: 2.5, instructions: '' },
+          { name: '', dose: '1' },
+        ],
+        unreadable_lines: ['Line 4'],
+      }),
+    );
+    expect(draft.doctor).toBe('Dr Rao');
+    expect(draft.date).toBe('2026-09-28');
+    expect(draft.meds).toEqual([
+      {
+        name: 'Ferrous ascorbate',
+        strength: '100 mg',
+        dose: '1 tablet',
+        frequency: 'OD',
+        time_of_day: 'afternoon',
+        duration_days: 90,
+        instructions: 'after food',
+      },
+      { name: 'Calcium', strength: '', dose: '1 tab', frequency: 'HS', time_of_day: 'morning', duration_days: null, instructions: '' },
+    ]);
+    expect(draft.unreadable_lines).toEqual(['Line 4']);
+    expect(parseRxResponse(answer({ doctor: '', date: 'Monday', meds: [], unreadable_lines: [] })).date).toBe('');
   });
 });
 
@@ -140,6 +238,18 @@ describe('parseClaudeResponse', () => {
 });
 
 describe('handleScan', () => {
+  it('reads each kind with its own parser', async () => {
+    const meal = deps({
+      callClaude: jest.fn(async () => answer({ items: [{ name: 'Idli', portion: '3', kcal: 120 }], confidence: 'high', unreadable_lines: [] })),
+    });
+    const { status, json } = await run(body({ kind: 'meal' }), meal);
+    expect(status).toBe(200);
+    expect(json.draft.items[0]).toMatchObject({ name: 'Idli', kcal: 120, protein_g: null });
+
+    const rx = deps({ callClaude: jest.fn(async () => answer({ doctor: 'Dr Rao', date: '', meds: [], unreadable_lines: [] })) });
+    expect((await run(body({ kind: 'rx' }), rx)).json.draft).toEqual({ doctor: 'Dr Rao', date: '', meds: [], unreadable_lines: [] });
+  });
+
   it('claims a scan, asks Claude and returns the draft', async () => {
     const d = deps();
     const { status, json } = await run(body(), d);
@@ -169,7 +279,7 @@ describe('handleScan', () => {
 
   it('refuses a bad request without spending a scan', async () => {
     const d = deps();
-    expect(await run(body({ kind: 'meal' }), d)).toEqual({ status: 400, json: { error: 'bad_request' } });
+    expect(await run(body({ kind: 'pills' }), d)).toEqual({ status: 400, json: { error: 'bad_request' } });
     expect(d.claimScan).not.toHaveBeenCalled();
   });
 

@@ -3,7 +3,7 @@ import { File } from 'expo-file-system';
 import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
-import { MAX_PDF_BYTES, SCAN_EDGE, ScanFailure, fileForScan, pickReportFile, scanReport } from '@/lib/scan';
+import { MAX_PDF_BYTES, SCAN_EDGE, ScanFailure, fileForScan, pickScanFile, scanReport } from '@/lib/scan';
 import { supabase } from '@/lib/supabase';
 
 jest.mock('expo-image-picker', () => ({
@@ -23,10 +23,10 @@ const invoke = jest.mocked(supabase.functions.invoke);
 
 beforeEach(() => jest.clearAllMocks());
 
-describe('pickReportFile', () => {
+describe('pickScanFile', () => {
   it('takes a photo with the camera after asking', async () => {
     picker.launchCameraAsync.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///c.jpg', width: 3000, height: 4000, fileName: null }] } as never);
-    expect(await pickReportFile('camera')).toEqual({
+    expect(await pickScanFile('camera')).toEqual({
       status: 'picked',
       file: { name: 'Photo', uri: 'file:///c.jpg', mediaType: 'image', width: 3000, height: 4000 },
     });
@@ -35,26 +35,26 @@ describe('pickReportFile', () => {
 
   it('says when permission is refused, and does not open the library', async () => {
     picker.requestMediaLibraryPermissionsAsync.mockResolvedValueOnce({ granted: false } as never);
-    expect(await pickReportFile('library')).toEqual({ status: 'denied' });
+    expect(await pickScanFile('library')).toEqual({ status: 'denied' });
     expect(picker.launchImageLibraryAsync).not.toHaveBeenCalled();
   });
 
   it('keeps the library photo’s file name', async () => {
     picker.launchImageLibraryAsync.mockResolvedValue({ canceled: false, assets: [{ uri: 'u', width: 1, height: 2, fileName: 'IMG_1.HEIC' }] } as never);
-    expect(await pickReportFile('library')).toMatchObject({ status: 'picked', file: { name: 'IMG_1.HEIC' } });
+    expect(await pickScanFile('library')).toMatchObject({ status: 'picked', file: { name: 'IMG_1.HEIC' } });
   });
 
   it('picks a PDF, refusing one that is too big', async () => {
     documents.getDocumentAsync.mockResolvedValueOnce({ canceled: false, assets: [{ name: 'cbc.pdf', uri: 'file:///cbc.pdf', size: 2000 }] } as never);
-    expect(await pickReportFile('pdf')).toEqual({
+    expect(await pickScanFile('pdf')).toEqual({
       status: 'picked',
       file: { name: 'cbc.pdf', uri: 'file:///cbc.pdf', mediaType: 'application/pdf', width: 0, height: 0 },
     });
     expect(documents.getDocumentAsync).toHaveBeenCalledWith(expect.objectContaining({ type: 'application/pdf' }));
     documents.getDocumentAsync.mockResolvedValueOnce({ canceled: false, assets: [{ name: 'big.pdf', uri: 'u', size: MAX_PDF_BYTES + 1 }] } as never);
-    expect(await pickReportFile('pdf')).toEqual({ status: 'too_large' });
+    expect(await pickScanFile('pdf')).toEqual({ status: 'too_large' });
     documents.getDocumentAsync.mockResolvedValueOnce({ canceled: true, assets: null } as never);
-    expect(await pickReportFile('pdf')).toEqual({ status: 'cancelled' });
+    expect(await pickScanFile('pdf')).toEqual({ status: 'cancelled' });
   });
 });
 

@@ -161,6 +161,8 @@ export type MealData = {
   amounts: Amounts;
   /** The user id of who logged it, or null if that isn't known. */
   by: string | null;
+  /** Set when the food and numbers came from a photo read by AI (and were checked). */
+  ai?: true;
 };
 
 /** A meal with the id and time of change of the record it came from. */
@@ -192,6 +194,7 @@ export function parseMeal(data: unknown): MealData | null {
     note: typeof note === 'string' && note.trim() ? note.trim() : null,
     amounts: parsed,
     by: typeof by === 'string' ? by : null,
+    ...(d.ai === true ? { ai: true as const } : {}),
   };
 }
 
@@ -251,6 +254,8 @@ export type NewMeal = {
   note: string;
   /** What was typed in each nutrient field. */
   amounts: Partial<Record<AmountKey, string>>;
+  /** The meal was read from a photo by AI. */
+  ai?: boolean;
 };
 
 export type ParsedMeal = { ok: true; data: MealData } | { ok: false; error: string };
@@ -268,7 +273,8 @@ export function newMealData(input: NewMeal, day: string, by: string | null): Par
     if (!parsed.ok) return { ok: false, error: `${name} should be a number from 0 to ${AMOUNT_MAX}, like 12 or 0.5.` };
     if (parsed.value !== null) amounts[key] = parsed.value;
   }
-  return { ok: true, data: { day, slot: input.slot, time: TIME.test(input.time) ? input.time : null, food, note: note || null, amounts, by } };
+  const data: MealData = { day, slot: input.slot, time: TIME.test(input.time) ? input.time : null, food, note: note || null, amounts, by };
+  return { ok: true, data: input.ai ? { ...data, ai: true } : data };
 }
 
 // ---------------------------------------------------------------------------
@@ -327,4 +333,67 @@ export function newCraving(input: string, existing: string[]): ParsedCraving {
   const same = text.toLocaleLowerCase();
   if (existing.some((c) => c.toLocaleLowerCase() === same)) return { ok: true, text: null };
   return { ok: true, text };
+}
+
+// ---------------------------------------------------------------------------
+// Meals read from a photo
+// ---------------------------------------------------------------------------
+
+/** What the scan function sends back for one food on the plate (see `src/lib/scan.ts`). */
+export type ScannedFood = {
+  name: string;
+  portion: string;
+  kcal: number | null;
+  protein_g: number | null;
+  iron_mg: number | null;
+  calcium_mg: number | null;
+  folate_mcg: number | null;
+  fibre_g: number | null;
+};
+
+/** One food on the review sheet: what the AI saw, and whether it is kept. */
+export type PlateItem = { name: string; portion: string; amounts: Amounts; on: boolean };
+
+const SCAN_FIELDS: Record<AmountKey, keyof ScannedFood> = {
+  kcal: 'kcal',
+  protein: 'protein_g',
+  iron: 'iron_mg',
+  calcium: 'calcium_mg',
+  folate: 'folate_mcg',
+  fibre: 'fibre_g',
+};
+
+/** The foods the AI saw, all kept to start with. */
+export function plateItems(foods: ScannedFood[]): PlateItem[] {
+  return foods.map((f) => {
+    const amounts: Amounts = {};
+    for (const { key } of AMOUNTS) {
+      const n = f[SCAN_FIELDS[key]];
+      if (typeof n === 'number' && Number.isFinite(n) && n >= 0) amounts[key] = n;
+    }
+    return { name: f.name, portion: f.portion, amounts, on: true };
+  });
+}
+
+/** "Dal tadka, Jeera rice, Roti": the kept foods, as the meal's name. */
+export function plateFood(items: PlateItem[]): string {
+  const names = items.filter((i) => i.on).map((i) => i.name);
+  let food = '';
+  for (const name of names) {
+    const next = food ? `${food}, ${name}` : name;
+    if (next.length > FOOD_MAX) break;
+    food = next;
+  }
+  return food;
+}
+
+/** The kept foods' numbers added up, as the add sheet's fields. A number none of them has stays empty. */
+export function plateAmounts(items: PlateItem[]): Partial<Record<AmountKey, string>> {
+  const fields: Partial<Record<AmountKey, string>> = {};
+  for (const { key } of AMOUNTS) {
+    const given = items.filter((i) => i.on && i.amounts[key] !== undefined);
+    if (given.length === 0) continue;
+    fields[key] = formatAmount(Math.min(AMOUNT_MAX, given.reduce((sum, i) => sum + (i.amounts[key] ?? 0), 0)));
+  }
+  return fields;
 }
