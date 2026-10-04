@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, type PressableProps } from 'react-native';
+import { Pressable, type PressableProps } from 'react-native';
 
 import { Text } from '@/components/Text';
-import { border, colors, fonts, radius, shadow, touchTarget } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius, touchTarget } from '@/theme/tokens';
 
 export type ChipProps = Omit<PressableProps, 'children' | 'style'> & {
   label: string;
@@ -11,14 +12,16 @@ export type ChipProps = Omit<PressableProps, 'children' | 'style'> & {
    * tags (meals, symptoms).
    */
   mode?: 'radio' | 'toggle';
-  /** Fill when selected; defaults to ink with white text. */
+  /** Accent fill when selected (with dark ink text); defaults to ink with surface text. */
   selectedTone?: string;
 };
 
 export function Chip({ label, selected, mode = 'radio', selectedTone, ...rest }: ChipProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const tinted = selected && selectedTone !== undefined;
   const background = selected ? (selectedTone ?? colors.ink) : colors.surface;
-  const textColor = selected && !tinted ? colors.surface : colors.ink;
+  const textColor = tinted ? colors.onAccent : selected ? colors.surface : colors.ink;
   return (
     <Pressable
       accessibilityRole={mode === 'radio' ? 'radio' : 'button'}
@@ -30,7 +33,7 @@ export function Chip({ label, selected, mode = 'radio', selectedTone, ...rest }:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ border, shadow }) => ({
   base: {
     minHeight: touchTarget,
     paddingHorizontal: 16,
@@ -47,4 +50,4 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyHeavy,
     fontSize: 15,
   },
-});
+}));

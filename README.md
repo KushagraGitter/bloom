@@ -23,11 +23,12 @@ src/app/            routes (each design artboard becomes one)
   appointments.tsx  month calendar, what is coming up, book and cancel appointments
   mood.tsx          mood, symptoms and a note, saved as entries with a history (opened from Today's tools)
   contractions.tsx  contraction timer: lengths, gaps and counts per session, earlier sessions, her own "when to call" notes
-  profile.tsx       edit details, reminders, units, partner invite code
+  profile.tsx       edit details, reminders, units, appearance (System / Light / Dark), partner invite code
   household-key.tsx show the household key as a QR code or recovery phrase, or take it on a new phone
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields, VaultGate (what a screen on the phone's records shows until they are open)
-src/theme/tokens.ts colours, fonts, borders and shadows from the design
+src/theme/tokens.ts light and dark palettes, fonts, borders and shadows from the design
+src/theme/theme.tsx ThemeProvider, useTheme and makeStyles: every screen reads colours from here so it follows light or dark mode
 src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths, reminders
   vault/            on-phone record store, encryption, household key and encrypted sync
 supabase/

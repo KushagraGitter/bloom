@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Image, Pressable, TextInput, View } from 'react-native';
 
 import {
   BottomSheet,
@@ -64,20 +64,23 @@ import {
   useScanMeal,
 } from '@/lib/useMeals';
 import { useVault } from '@/lib/vault/VaultProvider';
-import { border, colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { accents, fonts, radius } from '@/theme/tokens';
 
 /** Slot colours from the design, for the time tile and the chosen chip. */
-const SLOT_TONE: Record<Slot, string> = { breakfast: colors.yellow, snack: colors.pink, lunch: colors.mint, dinner: colors.lilac };
+const SLOT_TONE: Record<Slot, string> = { breakfast: accents.yellow, snack: accents.pink, lunch: accents.mint, dinner: accents.lilac };
 
 const BAR_TONE: Record<NutrientKey, string> = {
-  protein: colors.purple,
-  iron: colors.orange,
-  calcium: colors.yellow,
-  folate: colors.mint,
-  fibre: colors.pink,
+  protein: accents.purple,
+  iron: accents.orange,
+  calcium: accents.yellow,
+  folate: accents.mint,
+  fibre: accents.pink,
 };
 
 export default function MealsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session } = useSession();
   const membership = useMembership();
   const pregnancy = membership.data?.pregnancy;
@@ -228,6 +231,7 @@ export default function MealsScreen() {
 }
 
 function NutrientsCard({ bars, hasData, custom, onEdit }: { bars: Bar[]; hasData: boolean; custom: boolean; onEdit: () => void }) {
+  const styles = useStyles();
   return (
     <Card size="panel" style={styles.nutrients}>
       <View style={styles.cardHead}>
@@ -269,6 +273,7 @@ function NutrientsCard({ bars, hasData, custom, onEdit }: { bars: Bar[]; hasData
 }
 
 function MealRow({ meal, who, onRemove }: { meal: Meal; who: string | null; onRemove: () => void }) {
+  const styles = useStyles();
   const numbers = amountsLine(meal.amounts);
   return (
     <View style={styles.mealCard}>
@@ -313,6 +318,8 @@ function CravingsCard({
   cravings: Craving[];
   onRemove: (id: string) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const add = useAddCraving(pregnancyId);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -350,7 +357,7 @@ function CravingsCard({
               hitSlop={{ top: 5, bottom: 5 }}
               style={styles.craving}>
               <Text style={styles.cravingText}>{c.text}</Text>
-              <CrossIcon size={12} color={colors.ink} />
+              <CrossIcon size={12} color={colors.onAccent} />
             </Pressable>
           ))}
         </View>
@@ -359,7 +366,7 @@ function CravingsCard({
         <TextInput
           accessibilityLabel="New craving"
           placeholder="Craving mango again?"
-          placeholderTextColor={colors.inkMuted}
+          placeholderTextColor={colors.onAccentMuted}
           value={draft}
           onChangeText={setDraft}
           maxLength={CRAVING_MAX}
@@ -399,6 +406,7 @@ function AddMealSheet({
   by: string | null;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const add = useAddMeal(pregnancyId);
   const scan = useScanMeal();
   const [slot, setSlot] = useState<Slot>(startSlot);
@@ -630,6 +638,7 @@ function GoalsSheet({
   goals: Goals;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const save = useSaveGoals(pregnancyId);
   const [fields, setFields] = useState(() => goalsInput(goals));
   const [error, setError] = useState<string | null>(null);
@@ -682,7 +691,7 @@ function pairs<T>(items: T[]): T[][] {
   return Array.from({ length: Math.ceil(items.length / 2) }, (_, i) => items.slice(i * 2, i * 2 + 2));
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   headerText: { gap: 2, flexShrink: 1 },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 14 },
@@ -735,7 +744,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tileText: { fontFamily: fonts.display, fontSize: 15, color: colors.ink },
+  tileText: { fontFamily: fonts.display, fontSize: 15, color: colors.onAccent },
   mealText: { flex: 1, minWidth: 0, gap: 2 },
   slotRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   slotName: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 0.72, color: colors.inkMuted },
@@ -746,7 +755,7 @@ const styles = StyleSheet.create({
     borderColor: border.color,
     backgroundColor: colors.yellow,
   },
-  aiBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 10, letterSpacing: 0.4, color: colors.ink },
+  aiBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 10, letterSpacing: 0.4, color: colors.onAccent },
   food: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.ink },
   note: { fontSize: 13 },
   remove: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -761,7 +770,7 @@ const styles = StyleSheet.create({
   },
   addSlotText: { fontFamily: fonts.bodyHeavy, fontSize: 15, color: colors.ink },
   cravings: { padding: 16, gap: 10 },
-  cravingsLabel: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 0.96, color: colors.ink },
+  cravingsLabel: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 0.96, color: colors.onAccent },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   craving: {
     flexDirection: 'row',
@@ -771,22 +780,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: radius.pill,
     borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.surface,
+    borderColor: colors.onAccent,
+    backgroundColor: colors.paper,
   },
-  cravingText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.ink },
+  cravingText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.onAccent },
   cravingForm: { flexDirection: 'row', gap: 8 },
   cravingInput: {
     flex: 1,
     height: 48,
     borderRadius: radius.field,
     borderWidth: border.width,
-    borderColor: border.color,
+    borderColor: colors.onAccent,
     paddingHorizontal: 14,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.paper,
     fontFamily: fonts.body,
     fontSize: 16,
-    color: colors.ink,
+    color: colors.onAccent,
   },
   fieldRow: { flexDirection: 'row', gap: 10 },
   disclosure: { minHeight: 44, justifyContent: 'center' },
@@ -814,8 +823,8 @@ const styles = StyleSheet.create({
     borderColor: border.color,
     backgroundColor: colors.yellow,
   },
-  photoBadgeReading: { backgroundColor: colors.surface },
-  photoBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
+  photoBadgeReading: { backgroundColor: colors.paper },
+  photoBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.onAccent },
   failure: { gap: 12 },
   spotted: {
     gap: 8,
@@ -837,10 +846,10 @@ const styles = StyleSheet.create({
   },
   spottedOn: { backgroundColor: colors.mint },
   spottedOff: { backgroundColor: colors.surface },
-  spottedText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.ink },
+  spottedText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.onAccent },
   spottedTextOff: { color: colors.inkMuted, textDecorationLine: 'line-through' },
   macros: { flexDirection: 'row', gap: 6 },
   macro: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 12, backgroundColor: colors.ground },
   macroValue: { fontFamily: fonts.display, fontSize: 17, color: colors.ink },
   macroLabel: { fontFamily: fonts.bodyBold, fontSize: 11 },
-});
+}));

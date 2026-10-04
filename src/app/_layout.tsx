@@ -11,7 +11,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Button, Text } from '@/components';
@@ -22,7 +22,7 @@ import { queryClient } from '@/lib/queryClient';
 import { SessionProvider, useSession } from '@/lib/session';
 import { useReminders } from '@/lib/useReminders';
 import { VaultProvider } from '@/lib/vault/VaultProvider';
-import { colors } from '@/theme/tokens';
+import { makeStyles, ThemeProvider, useTheme } from '@/theme/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,15 +39,23 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        <SafeAreaProvider>
-          <StatusBar style="dark" />
-          <RootNavigator />
-        </SafeAreaProvider>
-      </SessionProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider>
+          <SafeAreaProvider>
+            <ThemedStatusBar />
+            <RootNavigator />
+          </SafeAreaProvider>
+        </SessionProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
+}
+
+/** Dark icons on the light theme, light icons on the dark one. */
+function ThemedStatusBar() {
+  const { scheme } = useTheme();
+  return <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />;
 }
 
 /**
@@ -55,6 +63,8 @@ export default function RootLayout() {
  * onboarding (set one up, or join a partner's with a code). Otherwise → tabs.
  */
 function RootNavigator() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session, loading } = useSession();
   const membership = useMembership();
   const signedIn = !!session;
@@ -111,6 +121,6 @@ function Background() {
   return null;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   error: { flex: 1, justifyContent: 'center', padding: 24, gap: 12, backgroundColor: colors.ground },
-});
+}));

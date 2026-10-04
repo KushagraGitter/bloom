@@ -1,6 +1,7 @@
-import { Text as RNText, StyleSheet, type TextProps as RNTextProps } from 'react-native';
+import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 
-import { colors, fonts, fontSize } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts, fontSize } from '@/theme/tokens';
 
 type Variant = 'screenTitle' | 'title' | 'stat' | 'body' | 'label' | 'caption';
 
@@ -11,6 +12,7 @@ export type TextProps = RNTextProps & {
 };
 
 export function Text({ variant = 'body', muted, color, style, ...rest }: TextProps) {
+  const styles = useStyles();
   return (
     <RNText
       {...rest}
@@ -24,7 +26,7 @@ export function Text({ variant = 'body', muted, color, style, ...rest }: TextPro
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   screenTitle: {
     fontFamily: fonts.display,
     fontSize: fontSize.screenTitle,
@@ -59,4 +61,4 @@ const styles = StyleSheet.create({
   muted: {
     color: colors.inkMuted,
   },
-});
+}));

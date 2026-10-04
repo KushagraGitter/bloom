@@ -2,9 +2,9 @@ import { create } from 'qrcode/lib/core/qrcode';
 import { useMemo } from 'react';
 import Svg, { Path, Rect } from 'react-native-svg';
 
-import { colors } from '@/theme/tokens';
+import { accents } from '@/theme/tokens';
 
-/** A QR code drawn with react-native-svg, dark on white with the standard 4-module quiet zone. */
+/** A QR code drawn with react-native-svg, dark on white in both themes (so it always scans), with the standard 4-module quiet zone. */
 export function QrCode({ value, size, accessibilityLabel }: { value: string; size: number; accessibilityLabel: string }) {
   const { path, count } = useMemo(() => {
     const { modules } = create(value, { errorCorrectionLevel: 'M' });
@@ -19,8 +19,8 @@ export function QrCode({ value, size, accessibilityLabel }: { value: string; siz
 
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${count} ${count}`} accessibilityLabel={accessibilityLabel} accessibilityRole="image">
-      <Rect width={count} height={count} fill="#FFFFFF" />
-      <Path d={path} fill={colors.ink} />
+      <Rect width={count} height={count} fill={accents.qrPaper} />
+      <Path d={path} fill={accents.qrInk} />
     </Svg>
   );
 }

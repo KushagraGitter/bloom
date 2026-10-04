@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -31,7 +31,8 @@ import {
 } from '@/lib/onboarding';
 import { localToday } from '@/lib/pregnancy';
 import { useSession } from '@/lib/session';
-import { border, colors, fonts, radius, shadow } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { accents, fonts, radius } from '@/theme/tokens';
 
 const STEPS = ['name', 'method', 'date', 'about', 'health', 'team', 'reminders'] as const;
 type Step = (typeof STEPS)[number] | 'done';
@@ -54,6 +55,8 @@ function formatDate(value: string): string {
 }
 
 export default function OnboardingScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session } = useSession();
   const profile = useProfile();
   const [step, setStep] = useState<Step>('name');
@@ -126,7 +129,9 @@ export default function OnboardingScreen() {
             <>
               {session?.user.email ? (
                 <View style={styles.badge}>
-                  <Text variant="label">Signed in as {session.user.email}</Text>
+                  <Text variant="label" color={accents.onAccent}>
+                    Signed in as {session.user.email}
+                  </Text>
                 </View>
               ) : null}
               <Question>First things first, what should we call you?</Question>
@@ -186,13 +191,13 @@ export default function OnboardingScreen() {
                     <Text style={styles.resultLbl}>WEEKS</Text>
                   </View>
                   <View style={styles.resultText}>
-                    <Text style={styles.resultTitle} color={colors.surface}>
+                    <Text style={styles.resultTitle} color={colors.onPurple}>
                       {dating.age.weeks} weeks, {dating.age.days} days
                     </Text>
-                    <Text variant="label" color={colors.surface}>
+                    <Text variant="label" color={colors.onPurple}>
                       Due {formatDate(dating.dueDate)}
                     </Text>
-                    <Text variant="label" color={colors.surface}>
+                    <Text variant="label" color={colors.onPurple}>
                       {['First', 'Second', 'Third'][dating.age.trimester - 1]} trimester
                     </Text>
                   </View>
@@ -353,6 +358,7 @@ export default function OnboardingScreen() {
 }
 
 function Question({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
   return (
     <Text accessibilityRole="header" style={styles.q}>
       {children}
@@ -361,10 +367,12 @@ function Question({ children }: { children: React.ReactNode }) {
 }
 
 function Hint({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
   return <Text muted style={styles.hint}>{children}</Text>;
 }
 
 function Group({ label, children, multi }: { label: string; children: React.ReactNode; multi?: boolean }) {
+  const styles = useStyles();
   return (
     <View style={styles.group}>
       <Text style={styles.groupLabel}>{label}</Text>
@@ -376,6 +384,8 @@ function Group({ label, children, multi }: { label: string; children: React.Reac
 }
 
 function JoinSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [code, setCode] = useState('');
   const join = useJoinWithCode();
   const [notFound, setNotFound] = useState(false);
@@ -439,6 +449,7 @@ function Done({
   weeks: number;
   onFinish: () => void;
 }) {
+  const styles = useStyles();
   const dating = datingFor(answers, localToday());
   const rows = [
     { k: 'Due date', v: dating.ok ? formatDate(dating.dueDate) : '—' },
@@ -479,7 +490,7 @@ function Done({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border, shadow }) => ({
   root: { flex: 1, backgroundColor: colors.ground },
   flex: { flex: 1 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 8 },
@@ -524,7 +535,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   resultNum: { fontFamily: fonts.display, fontSize: 34, lineHeight: 36 },
-  resultLbl: { fontFamily: fonts.bodyHeavy, fontSize: 11, letterSpacing: 1 },
+  resultLbl: { fontFamily: fonts.bodyHeavy, fontSize: 11, letterSpacing: 1, color: colors.onAccent },
   resultText: { flex: 1, gap: 4 },
   resultTitle: { fontFamily: fonts.display, fontSize: 20 },
   reminders: { paddingVertical: 4, paddingHorizontal: 16, gap: 0 },
@@ -559,7 +570,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     boxShadow: shadow.lg,
   },
-  doneNum: { fontFamily: fonts.display, fontSize: 72, lineHeight: 76 },
+  doneNum: { fontFamily: fonts.display, fontSize: 72, lineHeight: 76, color: colors.onAccent },
   doneCopy: { gap: 8 },
   center: { textAlign: 'center' },
   summary: { paddingVertical: 6, paddingHorizontal: 16, gap: 0 },
@@ -567,4 +578,4 @@ const styles = StyleSheet.create({
   summaryKey: { fontFamily: fonts.bodyMedium, fontSize: 15 },
   summaryVal: { fontFamily: fonts.bodyHeavy, fontSize: 15, textAlign: 'right', flexShrink: 1 },
   footerDone: { marginTop: 'auto' },
-});
+}));

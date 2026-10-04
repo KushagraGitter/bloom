@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import {
   BackButton,
@@ -35,14 +35,17 @@ import {
 } from '@/lib/appointments';
 import { confirmRemove } from '@/lib/confirm';
 import { useAddAppointment, useAppointments, useLocalToday, useMembership, useRemoveAppointment } from '@/lib/data';
-import { border, colors, fonts, radius, shadow } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { accents, fonts, radius } from '@/theme/tokens';
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 /** Date tile colours from the design, handed out down the list. */
-const TINTS = [colors.pink, colors.mint, colors.yellow, colors.lilac];
+const TINTS = [accents.pink, accents.mint, accents.yellow, accents.lilac];
 
 export default function AppointmentsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const membership = useMembership();
   const pregnancyId = membership.data?.pregnancy.id;
   const today = useLocalToday();
@@ -76,7 +79,7 @@ export default function AppointmentsScreen() {
           Appointments
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Add appointment" onPress={openAdd} style={styles.addButton}>
-          <PlusIcon />
+          <PlusIcon color={accents.onAccent} />
         </Pressable>
       </View>
 
@@ -132,8 +135,8 @@ export default function AppointmentsScreen() {
                       hasAppointment && styles.dayBooked,
                       isSelected && styles.daySelected,
                     ]}>
-                    <Text style={[styles.dayNumber, isSelected && { color: colors.surface }]}>{cell.n}</Text>
-                    <View style={[styles.dot, hasAppointment && { backgroundColor: isSelected ? colors.yellow : colors.ink }]} />
+                    <Text style={[styles.dayNumber, isSelected ? { color: colors.surface } : hasAppointment && { color: colors.onAccent }]}>{cell.n}</Text>
+                    <View style={[styles.dot, hasAppointment && { backgroundColor: isSelected ? colors.yellow : colors.onAccent }]} />
                   </Pressable>
                 );
               })}
@@ -202,6 +205,7 @@ export default function AppointmentsScreen() {
 }
 
 function AppointmentRow({ appointment, tint, onRemove }: { appointment: Appointment; tint: string; onRemove: () => void }) {
+  const styles = useStyles();
   return (
     <Card style={styles.row}>
       <View style={[styles.tile, { backgroundColor: tint }]}>
@@ -236,6 +240,7 @@ function AddSheet({
   onClose: () => void;
   onSaved: (day: string) => void;
 }) {
+  const styles = useStyles();
   const add = useAddAppointment(pregnancyId);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(initialDate);
@@ -290,7 +295,7 @@ function AddSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border, shadow }) => ({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   addButton: {
     width: 48,
@@ -335,7 +340,7 @@ const styles = StyleSheet.create({
   list: { gap: 10 },
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   allUpcoming: { minHeight: 44, paddingHorizontal: 4, justifyContent: 'center' },
-  allUpcomingText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purple },
+  allUpcomingText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.link },
   empty: { padding: 18, gap: 10, alignItems: 'flex-start' },
   emptyText: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.ink },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
@@ -358,4 +363,4 @@ const styles = StyleSheet.create({
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
   buttons: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
-});
+}));

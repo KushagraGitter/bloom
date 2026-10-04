@@ -20,15 +20,17 @@ import {
   type DiaryPhoto,
 } from '@/lib/useProgress';
 import { useVault } from '@/lib/vault/VaultProvider';
-import { border, colors, fonts, radius, touchTarget } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { accents, fonts, radius, touchTarget } from '@/theme/tokens';
 
 /** Weeks a photo can be filed under. */
 const MAX_WEEK = 42;
 
 /** Bar fills from the design: the latest week stands out. */
-const BAR_TONES: Record<Metric, string> = { weight: colors.purple, bp: colors.orange, sugar: colors.yellow };
+const BAR_TONES: Record<Metric, string> = { weight: accents.purple, bp: accents.orange, sugar: accents.yellow };
 
 export default function ProgressScreen() {
+  const styles = useStyles();
   const membership = useMembership();
   const pregnancy = membership.data?.pregnancy;
   const day = useLocalToday();
@@ -63,6 +65,8 @@ export default function ProgressScreen() {
 }
 
 function Journey({ totalDays, trimester }: { totalDays: number; trimester: 1 | 2 | 3 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const fill = journeyFill(totalDays);
   return (
     <Card size="panel" elevation="lg" style={styles.panel} accessible accessibilityLabel={`Journey: trimester ${trimester} of 3`}>
@@ -97,6 +101,8 @@ function Journey({ totalDays, trimester }: { totalDays: number; trimester: 1 | 2
 }
 
 function WeeklyChart({ pregnancyId, lmpDate, units }: { pregnancyId: string; lmpDate: string; units: 'metric' | 'imperial' }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const history = useCheckinHistory(pregnancyId);
   const [metric, setMetric] = useState<Metric>('weight');
   const chart = buildChart(history.data ?? [], metric, lmpDate, units);
@@ -162,6 +168,8 @@ function WeeklyChart({ pregnancyId, lmpDate, units }: { pregnancyId: string; lmp
 type Adding = { step: 'source' } | { step: 'preparing' } | { step: 'review'; photo: ShrunkPhoto; week: number } | { step: 'error'; message: string; settings?: boolean };
 
 function BumpDiary({ pregnancyId, lmpDate, today }: { pregnancyId: string; lmpDate: string; today: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const vault = useVault();
   const photos = useBumpPhotos(pregnancyId);
   const add = useAddBumpPhoto(pregnancyId);
@@ -305,6 +313,8 @@ function BumpDiary({ pregnancyId, lmpDate, today }: { pregnancyId: string; lmpDa
 }
 
 function PhotoViewer({ pregnancyId, photo, onClose }: { pregnancyId: string; photo: DiaryPhoto | null; onClose: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const image = useBumpImage(pregnancyId, photo?.imageId);
   const remove = useRemoveBumpPhoto(pregnancyId);
   const close = () => {
@@ -330,10 +340,10 @@ function PhotoViewer({ pregnancyId, photo, onClose }: { pregnancyId: string; pho
         </View>
         {photo && (
           <View style={styles.viewerBar}>
-            <Text variant="title" color={colors.surface}>
+            <Text variant="title" color={colors.onPurple}>
               Week {photo.week}
             </Text>
-            <Text color={colors.surface}>Added {formatDate(photo.day)}</Text>
+            <Text color={colors.onPurple}>Added {formatDate(photo.day)}</Text>
             {remove.isError && (
               <Text accessibilityRole="alert" color={colors.pink}>
                 Couldn&apos;t remove it. Try again.
@@ -351,6 +361,8 @@ function PhotoViewer({ pregnancyId, photo, onClose }: { pregnancyId: string; pho
 }
 
 function Averages({ pregnancyId, day }: { pregnancyId: string; day: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const kicks = useKicksWeek(pregnancyId, day);
   const history = useCheckinHistory(pregnancyId);
   const kickAvg = kicks.data ? kicksAverage(kicks.data) : null;
@@ -360,18 +372,18 @@ function Averages({ pregnancyId, day }: { pregnancyId: string; day: string }) {
       <Card tone={colors.mint} style={styles.stat}>
         <Text variant="label">Kicks · 7-day avg</Text>
         <Text variant="stat">{kickAvg === null ? '—' : `${kickAvg} / day`}</Text>
-        {kickAvg === null && <Text variant="caption" color={colors.ink}>None counted this week</Text>}
+        {kickAvg === null && <Text variant="caption" color={colors.onAccent}>None counted this week</Text>}
       </Card>
       <Card tone={colors.pink} style={styles.stat}>
         <Text variant="label">Sleep · 7-day avg</Text>
         <Text variant="stat">{sleep ?? '—'}</Text>
-        {sleep === null && <Text variant="caption" color={colors.ink}>None logged this week</Text>}
+        {sleep === null && <Text variant="caption" color={colors.onAccent}>None logged this week</Text>}
       </Card>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   header: { gap: 2 },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 14 },
   panel: { padding: 18, gap: 12 },
@@ -421,7 +433,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.orange,
     justifyContent: 'center',
   },
-  addPhotoText: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
+  addPhotoText: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.onAccent },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   thumb: {
     width: '31%',
@@ -436,7 +448,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     padding: 8,
   },
-  thumbLatest: { backgroundColor: '#FFE7A3' },
+  thumbLatest: { backgroundColor: colors.highlightWarm },
   thumbLabel: {
     fontFamily: fonts.bodyHeavy,
     fontSize: 12,
@@ -468,11 +480,11 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
   row: { flexDirection: 'row', gap: 10 },
   half: { flex: 1 },
-  viewer: { flex: 1, backgroundColor: colors.ink },
+  viewer: { flex: 1, backgroundColor: colors.photo },
   viewerImage: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  viewerWait: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.surface, textAlign: 'center', backgroundColor: 'rgba(30, 20, 51, 0.7)', padding: 12, borderRadius: radius.button, overflow: 'hidden' },
+  viewerWait: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.onPurple, textAlign: 'center', backgroundColor: colors.photoScrim, padding: 12, borderRadius: radius.button, overflow: 'hidden' },
   viewerBar: { padding: 20, gap: 8 },
   onDark: { borderColor: colors.surface },
   stats: { flexDirection: 'row', gap: 12 },
   stat: { flex: 1, borderRadius: radius.card, gap: 4 },
-});
+}));

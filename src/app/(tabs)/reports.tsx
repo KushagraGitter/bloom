@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Image, Pressable, TextInput, View } from 'react-native';
 
 import {
   BottomSheet,
@@ -52,9 +52,12 @@ import {
   type SavedReport,
 } from '@/lib/useReports';
 import { useVault } from '@/lib/vault/VaultProvider';
-import { border, colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 export default function ReportsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session } = useSession();
   const membership = useMembership();
   const pregnancy = membership.data?.pregnancy;
@@ -184,6 +187,7 @@ export default function ReportsScreen() {
 }
 
 function ReportCard({ report, who, onRemove }: { report: SavedReport; who: string | null; onRemove: () => void }) {
+  const styles = useStyles();
   const r = report.data;
   const kind = kindOf(r.kind);
   return (
@@ -238,6 +242,8 @@ function QuestionsCard({
   questions: SavedQuestion[];
   onRemove: (id: string) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const add = useAddQuestion(pregnancyId);
   const [draft, setDraft] = useState('');
   const submit = () => {
@@ -255,7 +261,7 @@ function QuestionsCard({
         <View key={q.id} style={styles.question}>
           <Text style={styles.questionText}>· {q.text}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel={`Remove question: ${q.text}`} onPress={() => onRemove(q.id)} style={styles.questionRemove}>
-            <CrossIcon color={colors.ink} size={16} />
+            <CrossIcon color={colors.onAccent} size={16} />
           </Pressable>
         </View>
       ))}
@@ -265,11 +271,11 @@ function QuestionsCard({
           value={draft}
           onChangeText={setDraft}
           placeholder="Type a question"
-          placeholderTextColor={colors.inkMuted}
+          placeholderTextColor={colors.onAccentMuted}
           maxLength={QUESTION_MAX}
           returnKeyType="done"
           onSubmitEditing={submit}
-          style={[styles.field, styles.grow]}
+          style={[styles.field, styles.fieldOnAccent, styles.grow]}
         />
         <Button label="Add" variant="dark" disabled={add.isPending || !cleanQuestion(draft)} onPress={submit} />
       </View>
@@ -301,6 +307,8 @@ function ReportSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const scan = useScanReport();
   const save = useSaveReport(pregnancyId);
   const [form, setForm] = useState<ReportForm>(() => blankForm(file?.name ?? ''));
@@ -533,12 +541,12 @@ function ReportSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   header: { gap: 2 },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 14 },
   problem: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
   byHand: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: -8, paddingHorizontal: 4 },
-  byHandText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purple },
+  byHandText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.link },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   list: { gap: 12 },
   card: {
@@ -584,12 +592,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: border.width,
     borderColor: border.color,
-    backgroundColor: '#FFF4C7',
+    backgroundColor: colors.highlight,
   },
   aiPill: {
     fontFamily: fonts.bodyHeavy,
     fontSize: 10,
-    color: colors.ink,
+    color: colors.onAccent,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: radius.pill,
@@ -608,9 +616,9 @@ const styles = StyleSheet.create({
   valueRange: { fontSize: 11, color: colors.inkMuted },
   flag: { fontFamily: fonts.bodyHeavy, fontSize: 11, color: colors.purpleDark },
   questions: { gap: 10 },
-  questionsTitle: { fontFamily: fonts.display, fontSize: 18, color: colors.ink },
+  questionsTitle: { fontFamily: fonts.display, fontSize: 18, color: colors.onAccent },
   question: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  questionText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.ink },
+  questionText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.onAccent },
   questionRemove: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   field: {
@@ -624,6 +632,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
+  fieldOnAccent: { borderColor: colors.onAccent, backgroundColor: colors.paper, color: colors.onAccent },
   grow: { flex: 1, minWidth: 0 },
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -648,7 +657,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     fontFamily: fonts.bodyHeavy,
     fontSize: 12,
-    color: colors.ink,
+    color: colors.onAccent,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: radius.pill,
@@ -676,7 +685,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: border.width,
     borderColor: border.color,
-    backgroundColor: '#FFF4C7',
+    backgroundColor: colors.highlight,
   },
   overline: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 1, color: colors.ink },
   valuesEdit: { gap: 8 },
@@ -696,4 +705,4 @@ const styles = StyleSheet.create({
   valueEditInput: { fontFamily: fonts.bodyHeavy, fontSize: 16, color: colors.ink, paddingVertical: 4, minHeight: 36 },
   buttons: { flexDirection: 'row', gap: 10 },
   half: { flex: 1 },
-});
+}));

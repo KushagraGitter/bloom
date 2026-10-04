@@ -1,9 +1,10 @@
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { Text } from '@/components/Text';
-import { border, colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 type IconProps = { color: string };
 
@@ -41,6 +42,8 @@ const icons: Record<string, (p: IconProps) => React.ReactElement> = {
 };
 
 export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]} accessibilityRole="tablist">
       {state.routes.map((route, index) => {
@@ -75,7 +78,7 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   bar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -101,4 +104,4 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontSize: 11,
   },
-});
+}));

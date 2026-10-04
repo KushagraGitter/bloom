@@ -150,6 +150,13 @@ describe('Profile', () => {
     expect(screen.getByRole('switch', { name: 'Vitamins', checked: true })).toBeTruthy();
   });
 
+  it('offers System, Light and Dark, following the phone until one is picked', async () => {
+    await render(<ProfileScreen />, { wrapper });
+    expect(await screen.findByRole('radio', { name: 'System', checked: true })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Light', checked: false })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Dark', checked: false })).toBeTruthy();
+  });
+
   it('lets the owner create an invite code for their partner', async () => {
     await render(<ProfileScreen />, { wrapper });
     await fireEvent.press(await screen.findByRole('button', { name: 'Create invite code' }));

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { BackButton, Button, Card, Chip, Screen, Text, TrashIcon } from '@/components';
@@ -23,12 +23,15 @@ import {
 import { useSession } from '@/lib/session';
 import { useAddSymptom, useCustomSymptoms, useMoodEntries, useRemoveMood, useRemoveSymptom, useSaveMood } from '@/lib/useMood';
 import { useVault } from '@/lib/vault/VaultProvider';
-import { border, colors, fonts, radius, shadow } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 /** How many past entries the history shows. */
 const HISTORY_SHOWN = 30;
 
 export default function MoodScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session } = useSession();
   const membership = useMembership();
   const pregnancyId = membership.data?.pregnancy.id;
@@ -261,6 +264,7 @@ export default function MoodScreen() {
 }
 
 function Face({ mouth }: { mouth: string }) {
+  const { colors } = useTheme();
   return (
     <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth={2.2} strokeLinecap="round">
       <Path d="M9 10h.01M15 10h.01" />
@@ -269,7 +273,7 @@ function Face({ mouth }: { mouth: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border, shadow }) => ({
   header: { gap: 2 },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 14 },
   moodCard: { padding: 16, gap: 12 },
@@ -325,7 +329,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   saveIdle: { opacity: 0.5 },
-  saveText: { fontFamily: fonts.bodyHeavy, fontSize: 16, color: colors.surface },
+  saveText: { fontFamily: fonts.bodyHeavy, fontSize: 16, color: colors.onPurple },
   entry: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -345,4 +349,4 @@ const styles = StyleSheet.create({
   entrySymptoms: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.ink },
   entryNote: { fontSize: 13 },
   remove: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-});
+}));

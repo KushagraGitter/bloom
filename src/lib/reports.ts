@@ -6,7 +6,7 @@
  */
 
 import { gestationalAge } from '@/lib/pregnancy';
-import { colors } from '@/theme/tokens';
+import { accents } from '@/theme/tokens';
 
 export const REPORT_KIND = 'report';
 export const QUESTION_KIND = 'question';
@@ -15,9 +15,9 @@ export type ReportKind = 'blood' | 'scan' | 'note';
 
 /** The type chips on the form, in the design's order. */
 export const REPORT_KINDS: { key: ReportKind; label: string; badge: string; tone: string }[] = [
-  { key: 'blood', label: 'Blood test', badge: 'BLOOD', tone: colors.orange },
-  { key: 'scan', label: 'Scan', badge: 'SCAN', tone: colors.mint },
-  { key: 'note', label: 'Doctor note', badge: 'NOTE', tone: colors.pink },
+  { key: 'blood', label: 'Blood test', badge: 'BLOOD', tone: accents.orange },
+  { key: 'scan', label: 'Scan', badge: 'SCAN', tone: accents.mint },
+  { key: 'note', label: 'Doctor note', badge: 'NOTE', tone: accents.pink },
 ];
 
 export const kindOf = (key: string) => REPORT_KINDS.find((k) => k.key === key) ?? REPORT_KINDS[2];
