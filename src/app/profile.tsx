@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, Share, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { BackButton, BottomSheet, Button, Card, Chip, DateField, Screen, Text, TextField, Toggle } from '@/components';
@@ -41,7 +41,8 @@ import { useSession } from '@/lib/session';
 import { NoShareSheetError, useExportData, type ExportFormat } from '@/lib/useExport';
 import { useNotificationPermission } from '@/lib/useReminders';
 import { useVault, type VaultState } from '@/lib/vault/VaultProvider';
-import { border, colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles, useAppearance, useTheme } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 type Editing = { key: FieldKey | 'name'; draft: string | string[] } | null;
 
@@ -57,6 +58,8 @@ const KEY_STATUS: Record<VaultState, string> = {
 };
 
 export default function ProfileScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session } = useSession();
   const membership = useMembership();
   const profile = useProfile();
@@ -162,6 +165,7 @@ export default function ProfileScreen() {
 }
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={styles.group}>
       <Text style={styles.groupTitle} accessibilityRole="header">
@@ -173,6 +177,8 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function Row({ label, value, onPress, first }: { label: string; value: string; onPress?: () => void; first?: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const empty = !value;
   return (
     <Pressable
@@ -197,6 +203,8 @@ function Row({ label, value, onPress, first }: { label: string; value: string; o
 }
 
 function PartnerSection({ pregnancyId, ownerId, isOwner }: { pregnancyId: string; ownerId: string; isOwner: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const members = useMembers(pregnancyId);
   const partner = members.data?.find((m) => m.role === 'partner');
   const owner = members.data?.find((m) => m.user_id === ownerId);
@@ -286,6 +294,7 @@ const LOCK_PROBLEM = {
 
 /** Face ID, fingerprint or passcode before Bloom opens, on this phone only. */
 function AppLockRow() {
+  const styles = useStyles();
   const { enabled, setEnabled } = useAppLock();
   const [problem, setProblem] = useState<keyof typeof LOCK_PROBLEM | null>(null);
   const [busy, setBusy] = useState(false);
@@ -323,6 +332,7 @@ function AppLockRow() {
 
 /** "Download my data": made on this phone, handed to the share sheet. */
 function YourData({ pregnancy, name, isOwner }: { pregnancy: Pregnancy; name: string; isOwner: boolean }) {
+  const styles = useStyles();
   const exporting = useExportData(pregnancy, name);
   const [format, setFormat] = useState<ExportFormat | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -369,6 +379,7 @@ function DeleteAccountSheet({
   isOwner: boolean;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const members = useMembers(pregnancy.id);
   const remove = useDeleteAccount(pregnancy.id);
   const [typed, setTyped] = useState('');
@@ -425,6 +436,7 @@ function DeleteAccountSheet({
 }
 
 function Reminders({ pregnancyId }: { pregnancyId: string }) {
+  const styles = useStyles();
   const prefs = useReminderPrefs(pregnancyId);
   const set = useSetReminder(pregnancyId);
   const { state: permission } = useNotificationPermission();
@@ -474,32 +486,78 @@ function Reminders({ pregnancyId }: { pregnancyId: string }) {
 }
 
 function UnitsSetting({ pregnancyId, units, canEdit }: { pregnancyId: string; units: 'metric' | 'imperial'; canEdit: boolean }) {
+  const styles = useStyles();
   const update = useUpdatePregnancy(pregnancyId);
   const current = update.isPending ? (update.variables?.units as typeof units) : units;
+  const { appearance, setAppearance } = useAppearance();
   return (
     <View style={styles.group}>
       <Text style={styles.groupTitle} accessibilityRole="header">
         APP
       </Text>
-      <View style={[styles.groupBox, styles.unitsBox]}>
-        <Text style={styles.reminderLabel}>Weight units</Text>
-        <View style={styles.segment} accessibilityRole="radiogroup" accessibilityLabel="Weight units">
-          {(['metric', 'imperial'] as const).map((u) => {
-            const on = current === u;
-            return (
-              <Pressable
-                key={u}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: on, disabled: !canEdit }}
-                disabled={!canEdit || on}
-                onPress={() => update.mutate({ units: u })}
-                style={[styles.segmentBtn, on && styles.segmentOn]}>
-                <Text style={[styles.segmentText, on && { color: colors.surface }]}>{u === 'metric' ? 'kg' : 'lb'}</Text>
-              </Pressable>
-            );
-          })}
+      <View style={styles.groupBox}>
+        <View style={styles.unitsBox}>
+          <Text style={styles.reminderLabel}>Weight units</Text>
+          <Segment
+            label="Weight units"
+            options={[
+              { key: 'metric', label: 'kg' },
+              { key: 'imperial', label: 'lb' },
+            ]}
+            value={current}
+            disabled={!canEdit}
+            onChange={(u) => update.mutate({ units: u })}
+          />
+        </View>
+        <View style={[styles.unitsBox, styles.rowDivider]}>
+          <Text style={styles.reminderLabel}>Appearance</Text>
+          <Segment
+            label="Appearance"
+            options={[
+              { key: 'system', label: 'System' },
+              { key: 'light', label: 'Light' },
+              { key: 'dark', label: 'Dark' },
+            ]}
+            value={appearance}
+            onChange={setAppearance}
+          />
         </View>
       </View>
+    </View>
+  );
+}
+
+function Segment<K extends string>({
+  label,
+  options,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  options: { key: K; label: string }[];
+  value: K;
+  disabled?: boolean;
+  onChange: (key: K) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.segment} accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {options.map((o) => {
+        const on = value === o.key;
+        return (
+          <Pressable
+            key={o.key}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on, disabled: !!disabled }}
+            disabled={disabled || on}
+            onPress={() => onChange(o.key)}
+            style={[styles.segmentBtn, on && styles.segmentOn]}>
+            <Text style={[styles.segmentText, on && { color: colors.surface }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -519,6 +577,7 @@ function EditSheet({
   onChange: (draft: string | string[]) => void;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const updatePregnancy = useUpdatePregnancy(pregnancy.id);
   const updateName = useUpdateName();
   const [error, setError] = useState<string | null>(null);
@@ -600,7 +659,7 @@ function EditSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   topSpacer: { width: 44 },
   screenTitle: { fontFamily: fonts.display, fontSize: 22, color: colors.ink },
@@ -614,21 +673,21 @@ const styles = StyleSheet.create({
     borderRadius: 65,
     backgroundColor: colors.yellow,
     borderWidth: border.width,
-    borderColor: border.color,
+    borderColor: colors.onAccent,
   },
   avatar: {
     width: 76,
     height: 76,
     borderRadius: 38,
     borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.surface,
+    borderColor: colors.onAccent,
+    backgroundColor: colors.paper,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontFamily: fonts.display, fontSize: 30, color: colors.ink },
+  avatarText: { fontFamily: fonts.display, fontSize: 30, color: colors.onAccent },
   heroText: { flex: 1, gap: 4 },
-  heroName: { fontFamily: fonts.display, fontSize: 24, lineHeight: 27, color: colors.ink },
+  heroName: { fontFamily: fonts.display, fontSize: 24, lineHeight: 27, color: colors.onAccent },
   badge: {
     alignSelf: 'flex-start',
     marginTop: 4,
@@ -638,10 +697,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: radius.pill,
     borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.surface,
+    borderColor: colors.onAccent,
+    backgroundColor: colors.paper,
     overflow: 'hidden',
-    color: colors.ink,
+    color: colors.onAccent,
   },
   group: { gap: 8 },
   groupTitle: { marginHorizontal: 4, fontFamily: fonts.bodyHeavy, fontSize: 13, letterSpacing: 1, color: colors.inkMuted },
@@ -658,7 +717,7 @@ const styles = StyleSheet.create({
   rowLabel: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.inkMuted, flexShrink: 0 },
   rowValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   rowValue: { fontFamily: fonts.bodyHeavy, fontSize: 15, color: colors.ink, textAlign: 'right', flexShrink: 1 },
-  rowAdd: { color: colors.purple },
+  rowAdd: { color: colors.link },
   danger: { color: colors.purpleDark, fontFamily: fonts.bodyHeavy },
   note: { marginTop: -8, marginHorizontal: 4 },
   invite: { padding: 16, gap: 10, borderRadius: radius.card },
@@ -666,7 +725,7 @@ const styles = StyleSheet.create({
   inviteButtons: { flexDirection: 'row', gap: 10 },
   flex: { flex: 1 },
   reminderLabel: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.ink },
-  unitsBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  unitsBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
   segment: { flexDirection: 'row', gap: 4, padding: 3, borderWidth: border.width, borderColor: border.color, borderRadius: radius.pill },
   segmentBtn: { height: 36, minWidth: 48, paddingHorizontal: 12, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   segmentOn: { backgroundColor: colors.ink },
@@ -676,4 +735,4 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   fieldRow: { flexDirection: 'row' },
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
-});
+}));

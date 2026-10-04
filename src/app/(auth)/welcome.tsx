@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Text } from '@/components';
-import { border, colors, fonts } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function WelcomeScreen() {
+  const styles = useStyles();
   const toSignIn = () => router.push('/sign-in');
   return (
     <SafeAreaView style={styles.root}>
@@ -32,7 +34,7 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   root: { flex: 1, backgroundColor: colors.ground, paddingHorizontal: 24, paddingBottom: 24, gap: 24 },
   art: { height: 340, marginTop: 24 },
   blob: { position: 'absolute', borderWidth: border.width, borderColor: border.color },
@@ -48,10 +50,10 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-12deg' }],
   },
   purple: { right: 40, top: 10, width: 60, height: 60, borderRadius: 30, backgroundColor: colors.purple },
-  word: { position: 'absolute', left: 36, top: 96, fontFamily: fonts.display, fontSize: 72, letterSpacing: -2.8 },
+  word: { position: 'absolute', left: 36, top: 96, fontFamily: fonts.display, fontSize: 72, letterSpacing: -2.8, color: colors.onAccent },
   copy: { gap: 10 },
   title: { fontFamily: fonts.display, fontSize: 34, lineHeight: 37, letterSpacing: -0.7 },
   hint: { fontSize: 15, lineHeight: 21 },
   actions: { marginTop: 'auto', gap: 10 },
   link: { borderWidth: 0, backgroundColor: 'transparent' },
-});
+}));

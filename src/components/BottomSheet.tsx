@@ -3,7 +3,8 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
-import { border, colors, fonts, fontSize, radius, space } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { fonts, fontSize, radius, space } from '@/theme/tokens';
 
 export type BottomSheetProps = {
   visible: boolean;
@@ -18,6 +19,7 @@ export type BottomSheetProps = {
  * with the keyboard open or a date picker showing can be.
  */
 export function BottomSheet({ visible, onClose, title, children }: BottomSheetProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   return (
@@ -46,7 +48,7 @@ export function BottomSheet({ visible, onClose, title, children }: BottomSheetPr
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   root: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -78,4 +80,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sheetTitle,
     color: colors.ink,
   },
-});
+}));

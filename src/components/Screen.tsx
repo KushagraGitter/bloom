@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, space } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
+import { space } from '@/theme/tokens';
 
 /**
  * Lavender page with the design's 20px side gutter and 18px section gap.
@@ -11,6 +12,7 @@ import { colors, space } from '@/theme/tokens';
  * keyboard is up presses it instead of only closing the keyboard.
  */
 export function Screen({ children, keyboardAware }: { children: ReactNode; keyboardAware?: boolean }) {
+  const styles = useStyles();
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       <ScrollView
@@ -23,7 +25,7 @@ export function Screen({ children, keyboardAware }: { children: ReactNode; keybo
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   root: {
     flex: 1,
     backgroundColor: colors.ground,
@@ -34,4 +36,4 @@ const styles = StyleSheet.create({
     paddingBottom: space.xxl,
     gap: 18,
   },
-});
+}));

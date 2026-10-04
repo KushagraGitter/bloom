@@ -1,14 +1,17 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton, Button, Card, Text } from '@/components';
 import { signInWithGoogle } from '@/lib/auth';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { colors, fonts } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts } from '@/theme/tokens';
 
 export default function SignInScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +73,7 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   root: { flex: 1, backgroundColor: colors.ground, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24, gap: 22 },
   copy: { gap: 10 },
   title: { fontFamily: fonts.display, fontSize: 30, lineHeight: 33, letterSpacing: -0.6 },
@@ -80,4 +83,4 @@ const styles = StyleSheet.create({
   actions: { marginTop: 'auto', gap: 12 },
   google: { minHeight: 56, borderRadius: 18 },
   fine: { textAlign: 'center' },
-});
+}));

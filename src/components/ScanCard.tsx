@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { Text } from '@/components/Text';
-import { border, colors, fonts, radius, shadow } from '@/theme/tokens';
+import { AccentZone, makeStyles } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 export type ScanSourceButton = { label: string; onPress: () => void };
 
@@ -27,10 +28,13 @@ export function ScanCard({
   sources: ScanSourceButton[];
   disabled: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.card}>
       <View style={styles.top}>
-        <View style={[styles.icon, { backgroundColor: iconTone }]}>{icon}</View>
+        <View style={[styles.icon, { backgroundColor: iconTone }]}>
+          <AccentZone>{icon}</AccentZone>
+        </View>
         <View style={styles.text}>
           <Text style={styles.title} accessibilityRole="header">
             {title}
@@ -55,7 +59,7 @@ export function ScanCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border, shadow }) => ({
   card: {
     gap: 14,
     padding: 16,
@@ -71,24 +75,24 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 16,
     borderWidth: border.width,
-    borderColor: border.color,
+    borderColor: colors.onAccent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: { flex: 1, gap: 2 },
-  title: { fontFamily: fonts.display, fontSize: 18, color: colors.surface },
-  subtitle: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.surface },
+  title: { fontFamily: fonts.display, fontSize: 18, color: colors.onPurple },
+  subtitle: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.onPurple },
   sources: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   source: {
     minHeight: 44,
     paddingHorizontal: 14,
     borderRadius: radius.pill,
     borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.surface,
+    borderColor: colors.onAccent,
+    backgroundColor: colors.paper,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sourceText: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
+  sourceText: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.onAccent },
   pressed: { opacity: 0.8 },
-});
+}));

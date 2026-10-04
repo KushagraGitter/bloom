@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { BottomSheet, Button, CalendarIcon, Card, CheckIcon, Chip, Screen, SmileIcon, Text, TextField, TimerIcon } from '@/components';
 import { VaultNotice } from '@/components/VaultNotice';
@@ -40,12 +40,15 @@ import {
 } from '@/lib/readings';
 import { useSession } from '@/lib/session';
 import { TIMES, doseKey, doseLine, dueOn, indexDoses, inDisplayOrder, tickedBy } from '@/lib/vitamins';
-import { border, colors, fonts, radius, touchTarget } from '@/theme/tokens';
+import { AccentZone, isAccentFill, makeStyles, useTheme } from '@/theme/theme';
+import { accents, fonts, radius, touchTarget } from '@/theme/tokens';
 
 /** Today's list stays short; the Vitamins tab has the rest. */
 const VITAMINS_SHOWN = 4;
 
 export default function TodayScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { session } = useSession();
   const membership = useMembership();
   const profile = useProfile();
@@ -103,7 +106,7 @@ export default function TodayScreen() {
           <Text style={styles.weekNum}>{ga.weeks}</Text>
           <Text style={styles.weekLbl}>WEEKS</Text>
         </View>
-        <Text style={styles.kicker} color={colors.surface}>
+        <Text style={styles.kicker} color={colors.onPurple}>
           TRIMESTER {ga.trimester} · DAY {ga.days}
         </Text>
         {sizeLine && <Text style={styles.size}>{sizeLine}</Text>}
@@ -111,10 +114,10 @@ export default function TodayScreen() {
           <View style={[styles.fill, { width: `${Math.round(ga.progress * 100)}%` }]} />
         </View>
         <View style={styles.row}>
-          <Text variant="label" color={colors.surface}>
+          <Text variant="label" color={colors.onPurple}>
             {Math.ceil(ga.daysToGo / 7)} weeks to go
           </Text>
-          <Text variant="label" color={colors.surface}>
+          <Text variant="label" color={colors.onPurple}>
             Due {formatDate(pregnancy.due_date)}
           </Text>
         </View>
@@ -176,6 +179,8 @@ export default function TodayScreen() {
 }
 
 function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string; rows: Reading[] }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const kicks = useTally(pregnancyId, 'kicks', day);
   const water = useTally(pregnancyId, 'water', day);
   const kickCount = countOf(rows, 'kicks');
@@ -216,7 +221,7 @@ function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string;
               disabled={glasses >= WATER_GOAL}
               onPress={() => water.add.mutate()}
               style={[styles.tallyBtn, styles.half, styles.dark, glasses >= WATER_GOAL && styles.disabled]}>
-              <Text style={[styles.plusMinus, { color: colors.surface }]}>+</Text>
+              <Text style={[styles.plusMinus, { color: colors.paper }]}>+</Text>
             </Pressable>
           </View>
         </Card>
@@ -232,6 +237,8 @@ function Tallies({ pregnancyId, day, rows }: { pregnancyId: string; day: string;
 
 /** The design's three tools. */
 function Tools() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={styles.section}>
       <Text variant="title" accessibilityRole="header">
@@ -252,21 +259,25 @@ function Tools() {
  * shrinks a little rather than a word breaking in the middle.
  */
 function ToolTile({ lines, tone, icon, onPress }: { lines: string[]; tone: string; icon: ReactNode; onPress: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={lines.join(' ')} onPress={onPress} style={[styles.tool, { backgroundColor: tone }]}>
-      {icon}
-      <View>
-        {lines.map((line) => (
-          <Text key={line} style={styles.toolLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-            {line}
-          </Text>
-        ))}
-      </View>
+      <AccentZone when={isAccentFill(tone)}>
+        {icon}
+        <View>
+          {lines.map((line) => (
+            <Text key={line} style={styles.toolLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      </AccentZone>
     </Pressable>
   );
 }
 
 function VitaminsCard({ pregnancyId, day }: { pregnancyId: string; day: string }) {
+  const styles = useStyles();
   const { session } = useSession();
   const meds = useMedications(pregnancyId);
   const doses = useDoses(pregnancyId);
@@ -302,7 +313,7 @@ function VitaminsCard({ pregnancyId, day }: { pregnancyId: string; day: string }
             accessibilityLabel={`${med.name}, ${when}`}
             onPress={() => toggle.mutate({ medicationId: med.id, day, taken: !dose })}
             style={styles.vitRow}>
-            <View style={[styles.box, !!dose && styles.boxOn]}>{dose && <CheckIcon />}</View>
+            <View style={[styles.box, !!dose && styles.boxOn]}>{dose && <CheckIcon color={accents.onAccent} />}</View>
             <View style={styles.vitText}>
               <Text style={styles.vitName} numberOfLines={1}>
                 {med.name}
@@ -338,6 +349,7 @@ function VitaminsCard({ pregnancyId, day }: { pregnancyId: string; day: string }
  * once an appointment's time has passed. Nothing shows when none is booked.
  */
 function NextAppointment({ pregnancyId }: { pregnancyId: string }) {
+  const styles = useStyles();
   const appointments = useAppointments(pregnancyId);
   // Renders again as each minute starts. The day and the time are then read from the one clock
   // reading, so the new time is never paired with the old day just after midnight.
@@ -380,6 +392,7 @@ function CheckinSheet({
   pregnancyId: string;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const log = useLogCheckin(pregnancyId);
   const [draft, setDraft] = useState('');
   const [context, setContext] = useState<string>(SUGAR_CONTEXTS[0]);
@@ -441,7 +454,7 @@ function CheckinSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerText: { gap: 2, flexShrink: 1 },
   date: { fontFamily: fonts.bodyMedium, fontSize: 14 },
@@ -455,7 +468,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontFamily: fonts.display, fontSize: 18, color: colors.ink },
+  avatarText: { fontFamily: fonts.display, fontSize: 18, color: colors.onAccent },
   hero: { padding: 22, gap: 14, minHeight: 170 },
   sun: {
     position: 'absolute',
@@ -466,19 +479,19 @@ const styles = StyleSheet.create({
     borderRadius: 75,
     backgroundColor: colors.yellow,
     borderWidth: border.width,
-    borderColor: border.color,
+    borderColor: colors.onAccent,
   },
   weekBadge: { position: 'absolute', right: 22, top: 26, alignItems: 'center' },
-  weekNum: { fontFamily: fonts.display, fontSize: 44, lineHeight: 46, color: colors.ink },
-  weekLbl: { fontFamily: fonts.bodyBold, fontSize: 12, letterSpacing: 1, color: colors.ink },
+  weekNum: { fontFamily: fonts.display, fontSize: 44, lineHeight: 46, color: colors.onAccent },
+  weekLbl: { fontFamily: fonts.bodyBold, fontSize: 12, letterSpacing: 1, color: colors.onAccent },
   kicker: { fontFamily: fonts.bodyBold, fontSize: 13, letterSpacing: 1, maxWidth: 200 },
-  size: { fontFamily: fonts.displayBold, fontSize: 22, lineHeight: 25, color: colors.surface, maxWidth: 200 },
+  size: { fontFamily: fonts.displayBold, fontSize: 22, lineHeight: 25, color: colors.onPurple, maxWidth: 200 },
   track: {
     height: 12,
     borderRadius: 99,
     borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderColor: colors.onAccent,
+    backgroundColor: colors.glass,
     overflow: 'hidden',
   },
   // Clears the week badge when there is no size line above the bar.
@@ -502,28 +515,28 @@ const styles = StyleSheet.create({
   checkinValue: { fontFamily: fonts.display, fontSize: 26, color: colors.ink },
   checkinUnit: { fontFamily: fonts.display, fontSize: 14, color: colors.ink },
   tally: { flexBasis: '47%', flexGrow: 1, borderRadius: radius.card, gap: 8 },
-  tallyNum: { fontFamily: fonts.display, fontSize: 36, lineHeight: 38, color: colors.ink },
-  tallyOf: { fontFamily: fonts.display, fontSize: 16, color: colors.ink },
+  tallyNum: { fontFamily: fonts.display, fontSize: 36, lineHeight: 38, color: colors.onAccent },
+  tallyOf: { fontFamily: fonts.display, fontSize: 16, color: colors.onAccent },
   tallyBtn: {
     minHeight: touchTarget,
     borderRadius: radius.button,
     borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.surface,
+    borderColor: colors.onAccent,
+    backgroundColor: colors.paper,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tallyBtnText: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
+  tallyBtnText: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.onAccent },
   half: { flex: 1 },
-  dark: { backgroundColor: colors.ink },
-  plusMinus: { fontFamily: fonts.bodyHeavy, fontSize: 20, color: colors.ink },
+  dark: { backgroundColor: colors.onAccent },
+  plusMinus: { fontFamily: fonts.bodyHeavy, fontSize: 20, color: colors.onAccent },
   disabled: { opacity: 0.5 },
   chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   fieldRow: { flexDirection: 'row' },
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
   vitCard: { padding: 16, gap: 10 },
   vitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  seeAll: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purple },
+  seeAll: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.link },
   vitRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingVertical: 4 },
   box: {
     width: 28,
@@ -549,7 +562,7 @@ const styles = StyleSheet.create({
     borderWidth: border.width,
     borderColor: border.color,
   },
-  toolLabel: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
+  toolLabel: { fontFamily: fonts.bodyHeavy, fontSize: 13 },
   nextCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -565,15 +578,15 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 16,
     borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.surface,
+    borderColor: colors.onAccent,
+    backgroundColor: colors.paper,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nextMonth: { fontFamily: fonts.bodyHeavy, fontSize: 11, color: colors.ink },
-  nextDay: { fontFamily: fonts.display, fontSize: 24, lineHeight: 24, color: colors.ink },
+  nextMonth: { fontFamily: fonts.bodyHeavy, fontSize: 11, color: colors.onAccent },
+  nextDay: { fontFamily: fonts.display, fontSize: 24, lineHeight: 24, color: colors.onAccent },
   nextText: { flex: 1, minWidth: 0, gap: 2 },
-  nextKicker: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.ink },
-  nextTitle: { fontFamily: fonts.display, fontSize: 18, lineHeight: 21, color: colors.ink },
-  nextMeta: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.ink },
-});
+  nextKicker: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.onAccent },
+  nextTitle: { fontFamily: fonts.display, fontSize: 18, lineHeight: 21, color: colors.onAccent },
+  nextMeta: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.onAccent },
+}));

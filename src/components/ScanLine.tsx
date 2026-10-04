@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Animated, StyleSheet } from 'react-native';
+import { Animated } from 'react-native';
 
-import { colors } from '@/theme/tokens';
+import { makeStyles } from '@/theme/theme';
 
 /** The design's yellow line sweeping up and down over a file while the AI reads it. */
 export function ScanLine({ height }: { height: number }) {
+  const styles = useStyles();
   const [y] = useState(() => new Animated.Value(0));
   useEffect(() => {
     const loop = Animated.loop(
@@ -19,6 +20,6 @@ export function ScanLine({ height }: { height: number }) {
   return <Animated.View style={[styles.line, { transform: [{ translateY: y }] }]} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   line: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: colors.yellow },
-});
+}));

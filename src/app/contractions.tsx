@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, View } from 'react-native';
 
 import { BackButton, BottomSheet, Button, Card, Screen, Text, TextField, TrashIcon } from '@/components';
 import { VaultNotice } from '@/components/VaultNotice';
@@ -29,7 +29,8 @@ import {
   useStopContraction,
 } from '@/lib/useContractions';
 import { useVault } from '@/lib/vault/VaultProvider';
-import { border, colors, fonts, radius } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius } from '@/theme/tokens';
 
 /** How many earlier sessions are listed. */
 const EARLIER_SHOWN = 10;
@@ -45,6 +46,8 @@ function useNow(): number {
 }
 
 export default function ContractionsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const membership = useMembership();
   const pregnancyId = membership.data?.pregnancy.id;
   const vault = useVault();
@@ -228,6 +231,7 @@ export default function ContractionsScreen() {
 }
 
 function Stat({ label, ms }: { label: string; ms: number | null }) {
+  const styles = useStyles();
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${label}, ${ms === null ? 'none yet' : spoken(ms)}`}>
       <Text style={styles.statLabel}>{label}</Text>
@@ -241,6 +245,8 @@ function Stat({ label, ms }: { label: string; ms: number | null }) {
  * or midwife told her, in her words: the app has no rule of its own.
  */
 function CallCard({ plan, canEdit, onEdit }: { plan: CallPlan | null; canEdit: boolean; onEdit: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const has = !!plan && !!(plan.advice || plan.place || plan.phone);
   const tel = plan ? telLink(plan.phone) : null;
   const place = [plan?.place, plan?.phone].filter(Boolean).join(' · ');
@@ -287,6 +293,7 @@ function PlanSheet({
   pregnancyId: string;
   onClose: () => void;
 }) {
+  const styles = useStyles();
   const save = useSaveCallPlan(pregnancyId);
   const [advice, setAdvice] = useState(plan?.advice ?? '');
   const [place, setPlace] = useState(plan?.place ?? '');
@@ -346,7 +353,7 @@ function PlanSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   header: { gap: 2 },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 14 },
   timer: { alignItems: 'center', gap: 14, paddingVertical: 8 },
@@ -367,7 +374,7 @@ const styles = StyleSheet.create({
   action: { fontFamily: fonts.bodyHeavy, fontSize: 15, color: colors.ink },
   hint: { fontFamily: fonts.bodyMedium, fontSize: 14, textAlign: 'center' },
   link: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
-  linkText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purple },
+  linkText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.link },
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark, textAlign: 'center' },
   stats: { flexDirection: 'row', gap: 10 },
   stat: {
@@ -383,11 +390,11 @@ const styles = StyleSheet.create({
   statLabel: { fontFamily: fonts.bodyBold, fontSize: 12, color: colors.inkMuted },
   statValue: { fontFamily: fonts.display, fontSize: 22, color: colors.ink, fontVariant: ['tabular-nums'] },
   call: { gap: 4, paddingVertical: 14, paddingHorizontal: 16 },
-  overline: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 1, color: colors.ink },
-  callEdit: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink, textDecorationLine: 'underline' },
-  callText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.ink },
+  overline: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 1, color: colors.onAccent },
+  callEdit: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.onAccent, textDecorationLine: 'underline' },
+  callText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.onAccent },
   callPhone: { textDecorationLine: 'underline' },
-  callNote: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.ink, marginTop: 6 },
+  callNote: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.onAccent, marginTop: 6 },
   section: { gap: 10 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   empty: { padding: 18 },
@@ -424,4 +431,4 @@ const styles = StyleSheet.create({
   adviceField: { height: 96, paddingTop: 12, paddingBottom: 12 },
   buttons: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
-});
+}));

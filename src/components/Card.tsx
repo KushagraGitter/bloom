@@ -1,9 +1,10 @@
-import { StyleSheet, View, type ViewProps } from 'react-native';
+import { View, type ViewProps } from 'react-native';
 
-import { border, colors, radius, shadow, space } from '@/theme/tokens';
+import { AccentZone, isAccentFill, makeStyles, useTheme } from '@/theme/theme';
+import { radius, space } from '@/theme/tokens';
 
 export type CardProps = ViewProps & {
-  /** Fill colour; defaults to white. */
+  /** Fill colour; defaults to the theme's card surface. Accent fills keep light-theme content. */
   tone?: string;
   /** Hard offset shadow size. */
   elevation?: 'none' | 'md' | 'lg';
@@ -12,29 +13,26 @@ export type CardProps = ViewProps & {
   size?: 'card' | 'panel' | 'hero';
 };
 
-export function Card({
-  tone = colors.surface,
-  elevation = 'none',
-  dashed,
-  size = 'card',
-  style,
-  ...rest
-}: CardProps) {
+export function Card({ tone, elevation = 'none', dashed, size = 'card', style, children, ...rest }: CardProps) {
+  const styles = useStyles();
+  const { colors, shadow } = useTheme();
+  const fill = tone ?? colors.surface;
   return (
     <View
       {...rest}
       style={[
         styles.base,
-        { backgroundColor: tone, borderRadius: radius[size] },
+        { backgroundColor: fill, borderRadius: radius[size] },
         dashed && styles.dashed,
         elevation !== 'none' && { boxShadow: shadow[elevation] },
         style,
-      ]}
-    />
+      ]}>
+      {isAccentFill(fill) ? <AccentZone>{children}</AccentZone> : children}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ border }) => ({
   base: {
     borderWidth: border.width,
     borderColor: border.color,
@@ -45,4 +43,4 @@ const styles = StyleSheet.create({
   dashed: {
     borderStyle: 'dashed',
   },
-});
+}));

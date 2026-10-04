@@ -1,11 +1,12 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useCallback, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Platform, Pressable, View } from 'react-native';
 
 import { CrossIcon } from '@/components/icons';
 import { Text } from '@/components/Text';
 import { clock, localTime } from '@/lib/appointments';
-import { border, colors, fonts, radius, touchTarget } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
+import { fonts, radius, touchTarget } from '@/theme/tokens';
 
 export type TimeFieldProps = {
   label?: string;
@@ -29,6 +30,8 @@ function todayAt(time: string): Date {
  * which stay open until the field is tapped again.
  */
 export function TimeField({ label = 'Time', value, onChange, startAt = '09:00' }: TimeFieldProps) {
+  const styles = useStyles();
+  const { colors, scheme } = useTheme();
   const [open, setOpen] = useState(false);
   const android = Platform.OS === 'android';
 
@@ -80,15 +83,15 @@ export function TimeField({ label = 'Time', value, onChange, startAt = '09:00' }
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onValueChange={pick}
           onDismiss={dismiss}
-          accentColor={colors.purple}
-          themeVariant="light"
+          accentColor={colors.link}
+          themeVariant={scheme}
         />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors, border }) => ({
   wrap: { gap: 6 },
   field: {
     height: 52,
@@ -104,4 +107,4 @@ const styles = StyleSheet.create({
   placeholder: { color: colors.inkMuted },
   // Reaches the field's full height and the 44pt minimum, though the cross itself is small.
   clear: { width: touchTarget, height: '100%', alignItems: 'center', justifyContent: 'center' },
-});
+}));

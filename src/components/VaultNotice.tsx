@@ -1,11 +1,10 @@
 import { router } from 'expo-router';
-import { StyleSheet } from 'react-native';
 
 import { Button } from './Button';
 import { Card } from './Card';
 import { Text } from './Text';
 import { useVault, type VaultState } from '@/lib/vault/VaultProvider';
-import { colors } from '@/theme/tokens';
+import { makeStyles, useTheme } from '@/theme/theme';
 
 const MESSAGES: Partial<Record<VaultState, { title: string; body: string; action?: string }>> = {
   'needs-key': {
@@ -29,6 +28,8 @@ const MESSAGES: Partial<Record<VaultState, { title: string; body: string; action
  * or that it is offline when it can.
  */
 export function VaultNotice() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const vault = useVault();
   const message = MESSAGES[vault.state];
   if (!message) return <OfflineNote />;
@@ -47,13 +48,14 @@ export function VaultNotice() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   card: { gap: 8, marginBottom: 16 },
   offline: { marginBottom: 8 },
-});
+}));
 
 /** A quiet line while syncing fails: what she adds is safe on the phone and goes up later. */
 export function OfflineNote() {
+  const styles = useStyles();
   const vault = useVault();
   if (vault.state !== 'ready' || !vault.sync?.error) return null;
   return (
