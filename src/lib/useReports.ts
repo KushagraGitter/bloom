@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { QUESTION_KIND, REPORT_KIND, inListOrder, type Question, type Report } from '@/lib/reports';
-import { fileForScan, scanReport, type PickedFile } from '@/lib/scan';
+import { fileForScan, scanPrescription, scanReport, type PickedFile } from '@/lib/scan';
 import { useSession } from '@/lib/session';
 import { listItems, newId, removeItems, saveItem, useVaultQuery, vaultQueryKey } from '@/lib/vault/records';
 import { useVault } from '@/lib/vault/VaultProvider';
@@ -35,6 +35,14 @@ export function useScanReport() {
   return useMutation({
     mutationFn: async (input: { pregnancyId: string; file: PickedFile; week: number | null }) =>
       scanReport({ pregnancyId: input.pregnancyId, week: input.week, file: await fileForScan(input.file) }),
+  });
+}
+
+/** Reads a prescription with the AI. Nothing is saved until the medicines are checked and added. */
+export function useScanPrescription() {
+  return useMutation({
+    mutationFn: async (input: { pregnancyId: string; file: PickedFile; week: number | null }) =>
+      scanPrescription({ pregnancyId: input.pregnancyId, week: input.week, file: await fileForScan(input.file) }),
   });
 }
 

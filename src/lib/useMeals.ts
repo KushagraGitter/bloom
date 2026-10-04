@@ -14,6 +14,7 @@ import {
   type Goals,
   type MealData,
 } from '@/lib/meals';
+import { fileForScan, scanMeal, type PickedFile } from '@/lib/scan';
 import { listItems, newId, removeItems, saveItem, stableId, useVaultQuery, vaultQueryKey } from '@/lib/vault/records';
 import { useVault, type Vault } from '@/lib/vault/VaultProvider';
 
@@ -81,4 +82,15 @@ export function useSaveGoals(pregnancyId: string | undefined) {
 /** Removes a meal or a craving on both phones. */
 export function useRemoveItem(pregnancyId: string | undefined) {
   return useChange(pregnancyId, (vault, _pregnancy, id: string) => removeItems(vault, [id]));
+}
+
+/**
+ * Reads a photo of a plate with the AI. Nothing is saved: the foods go to the
+ * add sheet, and only the meal saved there is kept. The photo is not kept.
+ */
+export function useScanMeal() {
+  return useMutation({
+    mutationFn: async (input: { pregnancyId: string; file: PickedFile; week: number | null }) =>
+      scanMeal({ pregnancyId: input.pregnancyId, week: input.week, file: await fileForScan(input.file) }),
+  });
 }

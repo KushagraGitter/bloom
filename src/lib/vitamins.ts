@@ -26,6 +26,8 @@ export type Medication = {
   start_date: string;
   end_date: string | null;
   created_at: string;
+  /** Set when it was added from a scanned prescription. */
+  source?: 'rx';
 };
 
 export type Dose = {
@@ -139,6 +141,8 @@ export type MedicationRow = {
   dose: string | null;
   time_of_day: TimeOfDay;
   start_date: string;
+  end_date?: string | null;
+  source?: 'rx';
 };
 
 export type ParsedMedication = { ok: true; row: MedicationRow } | { ok: false; error: string };
@@ -151,4 +155,61 @@ export function newMedicationRow(input: NewMedication, today: string): ParsedMed
   const dose = input.dose.trim();
   if (dose.length > DOSE_MAX) return { ok: false, error: `Keep the dose under ${DOSE_MAX} characters.` };
   return { ok: true, row: { name, dose: dose || null, time_of_day: input.time, start_date: today } };
+}
+
+/** "Until 2 Jan": the last day of a course, for under a medicine's dose. */
+export function untilLine(endDate: string, locale?: string): string {
+  const [y, m, d] = endDate.split('-').map(Number);
+  return `Until ${new Date(y, m - 1, d).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}`;
+}
+
+// ---------------------------------------------------------------------------
+// Medicines read from a prescription
+// ---------------------------------------------------------------------------
+
+/** What the scan function sends back for one medicine (see `src/lib/scan.ts`). */
+export type ScannedMed = {
+  name: string;
+  strength: string;
+  dose: string;
+  frequency: string;
+  time_of_day: TimeOfDay;
+  duration_days: number | null;
+  instructions: string;
+};
+
+/** One medicine on the review sheet. `days` is what is typed: empty means it carries on. */
+export type RxItem = { name: string; dose: string; time: TimeOfDay; days: string; written: string; on: boolean };
+
+export const DAYS_MAX = 366;
+
+/** The medicines the AI read, all ticked to start with. Strength, dose and directions become one dose line. */
+export function rxItems(meds: ScannedMed[]): RxItem[] {
+  return meds.map((m) => ({
+    name: m.name.slice(0, NAME_MAX),
+    dose: [m.strength, m.dose, m.instructions].filter((p) => p.trim()).join(' · ').slice(0, DOSE_MAX),
+    time: m.time_of_day,
+    days: m.duration_days ? String(m.duration_days) : '',
+    written: m.frequency,
+    on: true,
+  }));
+}
+
+export type ParsedRx = { ok: true; rows: MedicationRow[] } | { ok: false; error: string };
+
+/** The ticked medicines as rows to add, starting today, or what to fix first. */
+export function rowsFromRx(items: RxItem[], today: string): ParsedRx {
+  const rows: MedicationRow[] = [];
+  for (const item of items.filter((i) => i.on)) {
+    const parsed = newMedicationRow({ name: item.name, dose: item.dose, time: item.time }, today);
+    if (!parsed.ok) return parsed;
+    const typed = item.days.trim();
+    if (typed && !/^\d{1,3}$/.test(typed)) return { ok: false, error: `Days for ${parsed.row.name} should be a number, or empty if it carries on.` };
+    const days = typed ? Number(typed) : null;
+    if (days !== null && (days < 1 || days > DAYS_MAX)) {
+      return { ok: false, error: `Days for ${parsed.row.name} should be from 1 to ${DAYS_MAX}, or empty if it carries on.` };
+    }
+    rows.push({ ...parsed.row, end_date: days === null ? null : addDays(today, days - 1), source: 'rx' });
+  }
+  return { ok: true, rows };
 }

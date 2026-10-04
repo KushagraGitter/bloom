@@ -13,6 +13,10 @@ import {
   weekDots,
   type Dose,
   type Medication,
+  rowsFromRx,
+  rxItems,
+  untilLine,
+  type ScannedMed,
 } from '@/lib/vitamins';
 
 // A Saturday, so the week runs Monday 28 Sep to Sunday 4 Oct.
@@ -178,5 +182,55 @@ describe('newMedicationRow', () => {
     expect(newMedicationRow({ name: 'x'.repeat(NAME_MAX + 1), dose: '', time: 'morning' }, TODAY).ok).toBe(false);
     expect(newMedicationRow({ name: 'x'.repeat(NAME_MAX), dose: 'y'.repeat(DOSE_MAX + 1), time: 'morning' }, TODAY).ok).toBe(false);
     expect(newMedicationRow({ name: 'x'.repeat(NAME_MAX), dose: 'y'.repeat(DOSE_MAX), time: 'morning' }, TODAY).ok).toBe(true);
+  });
+});
+
+describe('medicines read from a prescription', () => {
+  const med = (over: Partial<ScannedMed> = {}): ScannedMed => ({
+    name: 'Iron',
+    strength: '100 mg',
+    dose: '1 tablet',
+    frequency: 'OD',
+    time_of_day: 'afternoon',
+    duration_days: 30,
+    instructions: 'after food',
+    ...over,
+  });
+
+  it('puts strength, dose and directions on one line and starts every medicine ticked', () => {
+    expect(rxItems([med(), med({ strength: ' ', instructions: '', duration_days: null, time_of_day: 'evening' })])).toEqual([
+      { name: 'Iron', dose: '100 mg · 1 tablet · after food', time: 'afternoon', days: '30', written: 'OD', on: true },
+      { name: 'Iron', dose: '1 tablet', time: 'evening', days: '', written: 'OD', on: true },
+    ]);
+  });
+
+  it('adds the ticked ones from today, ending after the days given', () => {
+    const items = rxItems([med(), med({ name: 'Calcium', duration_days: null }), med({ name: 'Skip' })]);
+    items[2].on = false;
+    expect(rowsFromRx(items, '2026-10-03')).toEqual({
+      ok: true,
+      rows: [
+        { name: 'Iron', dose: '100 mg · 1 tablet · after food', time_of_day: 'afternoon', start_date: '2026-10-03', end_date: '2026-11-01', source: 'rx' },
+        { name: 'Calcium', dose: '100 mg · 1 tablet · after food', time_of_day: 'afternoon', start_date: '2026-10-03', end_date: null, source: 'rx' },
+      ],
+    });
+    items[0].days = '1';
+    expect(rowsFromRx(items, '2026-10-03')).toMatchObject({ ok: true, rows: [{ end_date: '2026-10-03' }, {}] });
+  });
+
+  it('says what to fix: a missing name or days that are not a sensible number', () => {
+    const items = rxItems([med()]);
+    expect(rowsFromRx([{ ...items[0], name: ' ' }], '2026-10-03')).toEqual({ ok: false, error: 'Enter the medicine’s name.' });
+    expect(rowsFromRx([{ ...items[0], days: 'ten' }], '2026-10-03')).toEqual({
+      ok: false,
+      error: 'Days for Iron should be a number, or empty if it carries on.',
+    });
+    expect(rowsFromRx([{ ...items[0], days: '400' }], '2026-10-03')).toMatchObject({ ok: false });
+    expect(rowsFromRx([{ ...items[0], days: '0' }], '2026-10-03')).toMatchObject({ ok: false });
+    expect(rowsFromRx([{ ...items[0], on: false, name: '' }], '2026-10-03')).toEqual({ ok: true, rows: [] });
+  });
+
+  it('says until when a course runs', () => {
+    expect(untilLine('2026-12-31', 'en-GB')).toBe('Until 31 Dec');
   });
 });

@@ -1,7 +1,20 @@
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { BottomSheet, Button, Card, Chip, CrossIcon, Screen, Text, TextField, TimeField } from '@/components';
+import {
+  BottomSheet,
+  Button,
+  CameraIcon,
+  Card,
+  Chip,
+  CrossIcon,
+  ScanCard,
+  ScanLine,
+  Screen,
+  Text,
+  TextField,
+  TimeField,
+} from '@/components';
 import { VaultGate } from '@/components/VaultGate';
 import { confirmRemove } from '@/lib/confirm';
 import { useLocalTime, useLocalToday, useMembers, useMembership } from '@/lib/data';
@@ -22,6 +35,9 @@ import {
   newCraving,
   newGoals,
   newMealData,
+  plateAmounts,
+  plateFood,
+  plateItems,
   slotLabel,
   suggestSlot,
   tileTime,
@@ -31,10 +47,22 @@ import {
   type Goals,
   type Meal,
   type NutrientKey,
+  type PlateItem,
   type Slot,
 } from '@/lib/meals';
+import { gestationalAge } from '@/lib/pregnancy';
+import { FAILURE_TEXT, PICK_PROBLEM, ScanFailure, pickScanFile, type PickedFile } from '@/lib/scan';
 import { useSession } from '@/lib/session';
-import { useAddCraving, useAddMeal, useCravings, useGoals, useMeals, useRemoveItem, useSaveGoals } from '@/lib/useMeals';
+import {
+  useAddCraving,
+  useAddMeal,
+  useCravings,
+  useGoals,
+  useMeals,
+  useRemoveItem,
+  useSaveGoals,
+  useScanMeal,
+} from '@/lib/useMeals';
 import { useVault } from '@/lib/vault/VaultProvider';
 import { border, colors, fonts, radius } from '@/theme/tokens';
 
@@ -52,7 +80,8 @@ const BAR_TONE: Record<NutrientKey, string> = {
 export default function MealsScreen() {
   const { session } = useSession();
   const membership = useMembership();
-  const pregnancyId = membership.data?.pregnancy.id;
+  const pregnancy = membership.data?.pregnancy;
+  const pregnancyId = pregnancy?.id;
   const members = useMembers(pregnancyId);
   const vault = useVault();
   const day = useLocalToday();
@@ -63,13 +92,25 @@ export default function MealsScreen() {
   const remove = useRemoveItem(pregnancyId);
   const [addOpen, setAddOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
+  // The photo the add sheet reads with AI, or null when it is typed in.
+  const [photo, setPhoto] = useState<PickedFile | null>(null);
+  const [pickProblem, setPickProblem] = useState<keyof typeof PICK_PROBLEM | null>(null);
   // A new key each time a sheet opens gives it fresh fields, without them
   // visibly clearing as it slides away.
   const [sheetKey, setSheetKey] = useState(0);
-  const open = (sheet: 'add' | 'goals') => {
+  const open = (sheet: 'add' | 'goals', file: PickedFile | null = null) => {
     setSheetKey((k) => k + 1);
-    if (sheet === 'add') setAddOpen(true);
-    else setGoalsOpen(true);
+    setPickProblem(null);
+    if (sheet === 'add') {
+      setPhoto(file);
+      setAddOpen(true);
+    } else setGoalsOpen(true);
+  };
+  const snap = async (source: 'camera' | 'library') => {
+    setPickProblem(null);
+    const result = await pickScanFile(source);
+    if (result.status === 'picked') open('add', result.file);
+    else if (result.status !== 'cancelled') setPickProblem(result.status);
   };
 
   const today = useMemo(() => mealsOn(meals.data ?? [], day), [meals.data, day]);
@@ -79,6 +120,8 @@ export default function MealsScreen() {
 
   const loaded = meals.isSuccess && cravings.isSuccess && goals.isSuccess;
   const next = suggestSlot(today, now);
+  // Her week, so the AI knows how far along she is; unknown until her dates are in.
+  const weeks = pregnancy?.lmp_date && pregnancy.lmp_date <= day ? gestationalAge(pregnancy.lmp_date, day).weeks : null;
 
   return (
     <Screen keyboardAware>
@@ -99,6 +142,23 @@ export default function MealsScreen() {
       </View>
 
       <VaultGate what="meals">
+        <ScanCard
+          title="Snap your plate"
+          subtitle="AI fills in the food, portions and nutrients"
+          icon={<CameraIcon />}
+          iconTone={colors.yellow}
+          disabled={vault.state !== 'ready'}
+          sources={[
+            { label: 'Take a photo', onPress: () => snap('camera') },
+            { label: 'Choose a photo', onPress: () => snap('library') },
+          ]}
+        />
+        {pickProblem && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {PICK_PROBLEM[pickProblem]}
+          </Text>
+        )}
+
         {(meals.isError || cravings.isError || goals.isError) && (
           <Text muted accessibilityRole="alert">
             Couldn&apos;t load your meals. Close Bloom and open it again.
@@ -146,6 +206,8 @@ export default function MealsScreen() {
         key={`add-${sheetKey}`}
         visible={addOpen}
         pregnancyId={pregnancyId}
+        photo={photo}
+        week={weeks !== null && weeks >= 1 && weeks <= 45 ? weeks : null}
         day={day}
         startSlot={next}
         startTime={now}
@@ -214,7 +276,14 @@ function MealRow({ meal, who, onRemove }: { meal: Meal; who: string | null; onRe
         <Text style={styles.tileText}>{tileTime(meal.time)}</Text>
       </View>
       <View style={styles.mealText}>
-        <Text style={styles.slotName}>{slotLabel(meal.slot).toUpperCase()}</Text>
+        <View style={styles.slotRow}>
+          <Text style={styles.slotName}>{slotLabel(meal.slot).toUpperCase()}</Text>
+          {meal.ai && (
+            <View style={styles.aiBadge} accessibilityLabel="Read from a photo by AI">
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.food}>{meal.food}</Text>
         {meal.note && (
           <Text muted style={styles.note}>
@@ -312,6 +381,8 @@ function CravingsCard({
 function AddMealSheet({
   visible,
   pregnancyId,
+  photo,
+  week,
   day,
   startSlot,
   startTime,
@@ -320,6 +391,8 @@ function AddMealSheet({
 }: {
   visible: boolean;
   pregnancyId: string;
+  photo: PickedFile | null;
+  week: number | null;
   day: string;
   startSlot: Slot;
   startTime: string;
@@ -327,6 +400,7 @@ function AddMealSheet({
   onClose: () => void;
 }) {
   const add = useAddMeal(pregnancyId);
+  const scan = useScanMeal();
   const [slot, setSlot] = useState<Slot>(startSlot);
   const [food, setFood] = useState('');
   const [time, setTime] = useState(startTime);
@@ -334,9 +408,52 @@ function AddMealSheet({
   const [amounts, setAmounts] = useState<Partial<Record<AmountKey, string>>>({});
   const [showAmounts, setShowAmounts] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What the AI saw on the plate; empty until it has read the photo.
+  const [items, setItems] = useState<PlateItem[]>([]);
+  const [unreadable, setUnreadable] = useState<string[]>([]);
+  const [byHand, setByHand] = useState(!photo);
+
+  const read = () => {
+    if (!photo) return;
+    scan.mutate(
+      { pregnancyId, file: photo, week },
+      {
+        onSuccess: (draft) => {
+          const found = plateItems(draft.items);
+          setItems(found);
+          setUnreadable(draft.unreadable_lines);
+          setFood(plateFood(found));
+          setAmounts(plateAmounts(found));
+          setShowAmounts(found.length > 0);
+        },
+      },
+    );
+  };
+
+  // Starts reading as soon as the sheet opens with a photo.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || !visible) return;
+    started.current = true;
+    read();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const reading = !byHand && (scan.isPending || scan.isIdle);
+  const failed = !byHand && scan.isError;
+  const failure = scan.error instanceof ScanFailure ? scan.error.code : 'failed';
+  const fromAi = !byHand && scan.isSuccess;
+  const title = reading ? 'Scanning your meal' : fromAi ? 'Check your meal' : 'Add a meal';
+
+  const toggle = (index: number) => {
+    const next = items.map((item, i) => (i === index ? { ...item, on: !item.on } : item));
+    setItems(next);
+    setFood(plateFood(next));
+    setAmounts(plateAmounts(next));
+  };
 
   const save = () => {
-    const parsed = newMealData({ slot, food, time, note, amounts }, day, by);
+    const parsed = newMealData({ slot, food, time, note, amounts, ai: fromAi && items.length > 0 }, day, by);
     if (!parsed.ok) {
       setError(parsed.error);
       return;
@@ -345,49 +462,134 @@ function AddMealSheet({
     add.mutate(parsed.data, { onSuccess: onClose });
   };
 
+  const kept = items.filter((i) => i.on);
+  const totals = plateAmounts(kept);
+
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Add a meal">
-      <View style={styles.chips} accessibilityRole="radiogroup">
-        {SLOTS.map((s) => (
-          <Chip key={s.key} label={s.label} selected={slot === s.key} selectedTone={SLOT_TONE[s.key]} onPress={() => setSlot(s.key)} />
-        ))}
-      </View>
-      <View style={styles.fieldRow}>
-        <TextField
-          label="What was eaten?"
-          value={food}
-          onChangeText={setFood}
-          placeholder="e.g. Paneer paratha with curd"
-          maxLength={FOOD_MAX}
-          returnKeyType="next"
-        />
-      </View>
-      <TimeField value={time} onChange={setTime} startAt={startTime} />
-      <View style={styles.fieldRow}>
-        <TextField label="Notes" value={note} onChangeText={setNote} placeholder="Sides, drinks" maxLength={NOTE_MAX} />
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: showAmounts }}
-        onPress={() => setShowAmounts(!showAmounts)}
-        style={styles.disclosure}>
-        <Text style={styles.disclosureText}>{showAmounts ? '− Hide nutrients' : '+ Add nutrients (optional)'}</Text>
-      </Pressable>
-      {showAmounts &&
-        pairs(AMOUNTS).map((row) => (
-          <View key={row[0].key} style={styles.fieldRow}>
-            {row.map(({ key, name, unit }) => (
-              <TextField
-                key={key}
-                label={`${name} (${unit})`}
-                value={amounts[key] ?? ''}
-                onChangeText={(text) => setAmounts((a) => ({ ...a, [key]: text }))}
-                keyboardType="decimal-pad"
-                maxLength={8}
-              />
+    <BottomSheet visible={visible} onClose={onClose} title={title}>
+      {photo && !byHand && (
+        <View style={styles.photo}>
+          <Image source={{ uri: photo.uri }} style={styles.photoImage} accessibilityLabel="Photo of the meal" />
+          {reading && <ScanLine height={170} />}
+          {reading && (
+            <View style={[styles.photoBadge, styles.photoBadgeReading]}>
+              <Text style={styles.photoBadgeText} accessibilityLiveRegion="polite">
+                Reading your plate…
+              </Text>
+            </View>
+          )}
+          {fromAi && (
+            <View style={styles.photoBadge}>
+              <Text style={styles.photoBadgeText}>Filled by AI · check &amp; edit</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {reading && (
+        <Text muted style={styles.note}>
+          The photo goes to Claude, Anthropic&apos;s AI, to be read. It isn&apos;t kept, and nothing is saved until you check it.
+        </Text>
+      )}
+
+      {failed && (
+        <View style={styles.failure}>
+          <Text accessibilityRole="alert" style={styles.error}>
+            {FAILURE_TEXT[failure]}
+          </Text>
+          <View style={styles.buttons}>
+            {failure !== 'daily_limit' && failure !== 'not_set_up' && failure !== 'too_large' && (
+              <Button label="Try again" onPress={read} style={styles.half} />
+            )}
+            <Button label="Type it in" variant="dark" onPress={() => setByHand(true)} style={styles.half} />
+          </View>
+        </View>
+      )}
+
+      {fromAi && items.length === 0 && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          Couldn&apos;t spot any food in that photo. Type the meal in below.
+        </Text>
+      )}
+
+      {fromAi && items.length > 0 && (
+        <View style={styles.spotted}>
+          <Text style={styles.spottedLabel}>WHAT WE SPOTTED</Text>
+          <View style={styles.chips}>
+            {items.map((item, i) => (
+              <Pressable
+                key={`${item.name}-${i}`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: item.on }}
+                accessibilityLabel={`${item.name}, ${item.portion}`}
+                onPress={() => toggle(i)}
+                style={[styles.spottedChip, item.on ? styles.spottedOn : styles.spottedOff]}>
+                <Text style={[styles.spottedText, !item.on && styles.spottedTextOff]}>
+                  {item.portion ? `${item.name} · ${item.portion}` : item.name}
+                </Text>
+              </Pressable>
             ))}
           </View>
-        ))}
+          <View style={styles.macros}>
+            {MACROS.map(({ key, label, unit }) => (
+              <View key={key} style={styles.macro}>
+                <Text style={styles.macroValue}>{totals[key] ? `${totals[key]}${unit}` : '–'}</Text>
+                <Text muted style={styles.macroLabel}>
+                  {label}
+                </Text>
+              </View>
+            ))}
+          </View>
+          {unreadable.length > 0 && <Text variant="caption">Couldn&apos;t make out: {unreadable.join('; ')}</Text>}
+          <Text variant="caption">Estimates from the photo. Tap an item to leave it out.</Text>
+        </View>
+      )}
+
+      {!reading && !failed && (
+        <>
+          <View style={styles.chips} accessibilityRole="radiogroup">
+            {SLOTS.map((s) => (
+              <Chip key={s.key} label={s.label} selected={slot === s.key} selectedTone={SLOT_TONE[s.key]} onPress={() => setSlot(s.key)} />
+            ))}
+          </View>
+          <View style={styles.fieldRow}>
+            <TextField
+              label="What was eaten?"
+              value={food}
+              onChangeText={setFood}
+              placeholder="e.g. Paneer paratha with curd"
+              maxLength={FOOD_MAX}
+              returnKeyType="next"
+            />
+          </View>
+          <TimeField value={time} onChange={setTime} startAt={startTime} />
+          <View style={styles.fieldRow}>
+            <TextField label="Notes" value={note} onChangeText={setNote} placeholder="Sides, drinks" maxLength={NOTE_MAX} />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showAmounts }}
+            onPress={() => setShowAmounts(!showAmounts)}
+            style={styles.disclosure}>
+            <Text style={styles.disclosureText}>{showAmounts ? '− Hide nutrients' : '+ Add nutrients (optional)'}</Text>
+          </Pressable>
+          {showAmounts &&
+            pairs(AMOUNTS).map((row) => (
+              <View key={row[0].key} style={styles.fieldRow}>
+                {row.map(({ key, name, unit }) => (
+                  <TextField
+                    key={key}
+                    label={`${name} (${unit})`}
+                    value={amounts[key] ?? ''}
+                    onChangeText={(text) => setAmounts((a) => ({ ...a, [key]: text }))}
+                    keyboardType="decimal-pad"
+                    maxLength={8}
+                  />
+                ))}
+              </View>
+            ))}
+        </>
+      )}
       {(error || add.isError) && (
         <Text accessibilityRole="alert" style={styles.error}>
           {error ?? 'Couldn’t save. Try again.'}
@@ -395,11 +597,27 @@ function AddMealSheet({
       )}
       <View style={styles.buttons}>
         <Button label="Cancel" onPress={onClose} style={styles.half} />
-        <Button label={add.isPending ? 'Saving…' : 'Save meal'} variant="dark" disabled={add.isPending} onPress={save} style={styles.half} />
+        {!failed && (
+          <Button
+            label={add.isPending ? 'Saving…' : 'Save meal'}
+            variant="dark"
+            disabled={reading || add.isPending}
+            onPress={save}
+            style={styles.half}
+          />
+        )}
       </View>
     </BottomSheet>
   );
 }
+
+/** The four numbers the design shows under what was spotted. */
+const MACROS: { key: AmountKey; label: string; unit: string }[] = [
+  { key: 'kcal', label: 'kcal', unit: '' },
+  { key: 'protein', label: 'protein', unit: 'g' },
+  { key: 'iron', label: 'iron', unit: 'mg' },
+  { key: 'fibre', label: 'fibre', unit: 'g' },
+];
 
 function GoalsSheet({
   visible,
@@ -519,7 +737,16 @@ const styles = StyleSheet.create({
   },
   tileText: { fontFamily: fonts.display, fontSize: 15, color: colors.ink },
   mealText: { flex: 1, minWidth: 0, gap: 2 },
+  slotRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   slotName: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 0.72, color: colors.inkMuted },
+  aiBadge: {
+    paddingHorizontal: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: border.color,
+    backgroundColor: colors.yellow,
+  },
+  aiBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 10, letterSpacing: 0.4, color: colors.ink },
   food: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.ink },
   note: { fontSize: 13 },
   remove: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -567,4 +794,53 @@ const styles = StyleSheet.create({
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
   buttons: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
+  photo: {
+    height: 170,
+    borderRadius: 22,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.line,
+    overflow: 'hidden',
+  },
+  photoImage: { width: '100%', height: '100%' },
+  photoBadge: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.yellow,
+  },
+  photoBadgeReading: { backgroundColor: colors.surface },
+  photoBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
+  failure: { gap: 12 },
+  spotted: {
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.surface,
+  },
+  spottedLabel: { fontFamily: fonts.bodyHeavy, fontSize: 12, letterSpacing: 0.96, color: colors.inkMuted },
+  spottedChip: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    borderWidth: border.width,
+    borderColor: border.color,
+  },
+  spottedOn: { backgroundColor: colors.mint },
+  spottedOff: { backgroundColor: colors.surface },
+  spottedText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.ink },
+  spottedTextOff: { color: colors.inkMuted, textDecorationLine: 'line-through' },
+  macros: { flexDirection: 'row', gap: 6 },
+  macro: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 12, backgroundColor: colors.ground },
+  macroValue: { fontFamily: fonts.display, fontSize: 17, color: colors.ink },
+  macroLabel: { fontFamily: fonts.bodyBold, fontSize: 11 },
 });

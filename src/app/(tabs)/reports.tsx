@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { BottomSheet, Button, Card, Chip, CrossIcon, ReportIcon, Screen, Text, TextField, TrashIcon, UploadIcon } from '@/components';
+import {
+  BottomSheet,
+  Button,
+  Card,
+  Chip,
+  CrossIcon,
+  ReportIcon,
+  ScanCard,
+  ScanLine,
+  Screen,
+  Text,
+  TextField,
+  TrashIcon,
+  UploadIcon,
+} from '@/components';
 import { VaultGate } from '@/components/VaultGate';
 import { confirmRemove } from '@/lib/confirm';
 import { useLocalToday, useMembers, useMembership } from '@/lib/data';
@@ -25,7 +39,7 @@ import {
   type ReportForm,
   type ReportKind,
 } from '@/lib/reports';
-import { FAILURE_TEXT, ScanFailure, pickReportFile, type PickedFile, type ScanSource } from '@/lib/scan';
+import { FAILURE_TEXT, PICK_PROBLEM, ScanFailure, pickScanFile, type PickedFile, type ScanSource } from '@/lib/scan';
 import { useSession } from '@/lib/session';
 import {
   useAddQuestion,
@@ -38,12 +52,7 @@ import {
   type SavedReport,
 } from '@/lib/useReports';
 import { useVault } from '@/lib/vault/VaultProvider';
-import { border, colors, fonts, radius, shadow } from '@/theme/tokens';
-
-const PICK_PROBLEM = {
-  denied: 'Bloom needs permission to use the camera or photos. You can allow it in your phone’s Settings.',
-  too_large: 'That PDF is over 10 MB. Try a photo of each page instead.',
-} as const;
+import { border, colors, fonts, radius } from '@/theme/tokens';
 
 export default function ReportsScreen() {
   const { session } = useSession();
@@ -70,7 +79,7 @@ export default function ReportsScreen() {
 
   const pick = async (source: ScanSource) => {
     setPickProblem(null);
-    const result = await pickReportFile(source);
+    const result = await pickScanFile(source);
     if (result.status === 'picked') open(result.file);
     else if (result.status !== 'cancelled') setPickProblem(result.status);
   };
@@ -89,24 +98,18 @@ export default function ReportsScreen() {
       </View>
 
       <VaultGate what="reports">
-        <View style={styles.upload}>
-          <View style={styles.uploadTop}>
-            <View style={styles.uploadIcon}>
-              <UploadIcon />
-            </View>
-            <View style={styles.uploadText}>
-              <Text style={styles.uploadTitle} accessibilityRole="header">
-                Upload a report
-              </Text>
-              <Text style={styles.uploadSub}>Photo or PDF · AI reads the values for you</Text>
-            </View>
-          </View>
-          <View style={styles.sources}>
-            <SourceButton label="Take a photo" onPress={() => pick('camera')} disabled={!ready} />
-            <SourceButton label="Choose a photo" onPress={() => pick('library')} disabled={!ready} />
-            <SourceButton label="PDF" onPress={() => pick('pdf')} disabled={!ready} />
-          </View>
-        </View>
+        <ScanCard
+          title="Upload a report"
+          subtitle="Photo or PDF · AI reads the values for you"
+          icon={<UploadIcon />}
+          iconTone={colors.yellow}
+          disabled={!ready}
+          sources={[
+            { label: 'Take a photo', onPress: () => pick('camera') },
+            { label: 'Choose a photo', onPress: () => pick('library') },
+            { label: 'PDF', onPress: () => pick('pdf') },
+          ]}
+        />
         {pickProblem && (
           <Text accessibilityRole="alert" style={styles.problem}>
             {PICK_PROBLEM[pickProblem]}
@@ -177,19 +180,6 @@ export default function ReportsScreen() {
         />
       )}
     </Screen>
-  );
-}
-
-function SourceButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled: boolean }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.source, pressed && styles.pressed]}>
-      <Text style={styles.sourceText}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -375,7 +365,7 @@ function ReportSheet({
             ) : (
               <Text style={styles.pdf}>PDF</Text>
             )}
-            {reading && <ScanLine />}
+            {reading && <ScanLine height={108} />}
           </View>
           <View style={styles.fileText}>
             <Text style={styles.fileName} numberOfLines={1}>
@@ -543,61 +533,9 @@ function ReportSheet({
   );
 }
 
-/** The design's yellow line sweeping over the file while it is read. */
-function ScanLine() {
-  const [y] = useState(() => new Animated.Value(0));
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(y, { toValue: 100, duration: 700, useNativeDriver: true }),
-        Animated.timing(y, { toValue: 0, duration: 700, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [y]);
-  return <Animated.View style={[styles.scanLine, { transform: [{ translateY: y }] }]} />;
-}
-
 const styles = StyleSheet.create({
   header: { gap: 2 },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 14 },
-  upload: {
-    gap: 14,
-    padding: 16,
-    borderRadius: radius.panel,
-    borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.purple,
-    boxShadow: shadow.lg,
-  },
-  uploadTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  uploadIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.yellow,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  uploadText: { flex: 1, gap: 2 },
-  uploadTitle: { fontFamily: fonts.display, fontSize: 18, color: colors.surface },
-  uploadSub: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.surface },
-  sources: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  source: {
-    minHeight: 44,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    borderWidth: border.width,
-    borderColor: border.color,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sourceText: { fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
-  pressed: { opacity: 0.8 },
   problem: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
   byHand: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: -8, paddingHorizontal: 4 },
   byHandText: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purple },
@@ -702,14 +640,6 @@ const styles = StyleSheet.create({
   },
   previewImage: { width: '100%', height: '100%' },
   pdf: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
-  scanLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
-    backgroundColor: colors.yellow,
-  },
   fileText: { flex: 1, minWidth: 0, gap: 4 },
   fileName: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.inkMuted },
   readingTitle: { fontFamily: fonts.bodyHeavy, fontSize: 15, color: colors.ink },

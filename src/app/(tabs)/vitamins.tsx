@@ -1,11 +1,27 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { BottomSheet, Button, Card, Chip, PillIcon, PlusIcon, Screen, Text, TextField, TrashIcon } from '@/components';
+import {
+  BottomSheet,
+  Button,
+  Card,
+  CheckIcon,
+  Chip,
+  PillIcon,
+  PlusIcon,
+  ScanCard,
+  ScanIcon,
+  ScanLine,
+  Screen,
+  Text,
+  TextField,
+  TrashIcon,
+} from '@/components';
 import { VaultNotice } from '@/components/VaultNotice';
 import { confirmRemove } from '@/lib/confirm';
 import {
   useAddMedication,
+  useAddMedications,
   useDoses,
   useLocalToday,
   useMedications,
@@ -15,7 +31,11 @@ import {
   useToggleDose,
 } from '@/lib/data';
 import { timeOf } from '@/lib/format';
+import { gestationalAge } from '@/lib/pregnancy';
+import { FAILURE_TEXT, PICK_PROBLEM, ScanFailure, pickScanFile, type PickedFile, type ScanSource } from '@/lib/scan';
 import { useSession } from '@/lib/session';
+import { useScanPrescription } from '@/lib/useReports';
+import { useVault } from '@/lib/vault/VaultProvider';
 import {
   DOSE_MAX,
   NAME_MAX,
@@ -26,12 +46,16 @@ import {
   groupByTime,
   indexDoses,
   newMedicationRow,
+  rowsFromRx,
+  rxItems,
   streakOf,
   tickedBy,
   tintIndex,
+  untilLine,
   weekDots,
   type Dose,
   type Medication,
+  type RxItem,
   type TimeOfDay,
   type WeekDot,
 } from '@/lib/vitamins';
@@ -43,7 +67,9 @@ const TINTS = [colors.pink, colors.mint, colors.orange, colors.yellow, colors.li
 export default function VitaminsScreen() {
   const { session } = useSession();
   const membership = useMembership();
-  const pregnancyId = membership.data?.pregnancy.id;
+  const pregnancy = membership.data?.pregnancy;
+  const pregnancyId = pregnancy?.id;
+  const vault = useVault();
   const day = useLocalToday();
   const meds = useMedications(pregnancyId);
   const doses = useDoses(pregnancyId);
@@ -55,7 +81,19 @@ export default function VitaminsScreen() {
   const [sheetKey, setSheetKey] = useState(0);
   const openAdd = () => {
     setSheetKey((k) => k + 1);
+    setRx(null);
     setAdding(true);
+  };
+  // The prescription being read, and what to say once its medicines are in.
+  const [rx, setRx] = useState<{ key: number; file: PickedFile } | null>(null);
+  const [added, setAdded] = useState<string | null>(null);
+  const [pickProblem, setPickProblem] = useState<keyof typeof PICK_PROBLEM | null>(null);
+  const scanRx = async (source: ScanSource) => {
+    setPickProblem(null);
+    setAdded(null);
+    const result = await pickScanFile(source);
+    if (result.status === 'picked') setRx((r) => ({ key: (r?.key ?? 0) + 1, file: result.file }));
+    else if (result.status !== 'cancelled') setPickProblem(result.status);
   };
 
   // The root layout only shows the tabs once a pregnancy exists.
@@ -67,6 +105,7 @@ export default function VitaminsScreen() {
   const index = indexDoses(taken);
   const done = due.filter((m) => index.has(doseKey(m.id, day))).length;
   const loaded = meds.isSuccess && doses.isSuccess;
+  const weeks = pregnancy?.lmp_date && pregnancy.lmp_date <= day ? gestationalAge(pregnancy.lmp_date, day).weeks : null;
 
   return (
     <Screen>
@@ -140,12 +179,57 @@ export default function VitaminsScreen() {
       )}
 
       {loaded && (
+        <ScanCard
+          title="Scan a prescription"
+          subtitle="AI adds each medicine with its dose and timing"
+          icon={<ScanIcon />}
+          iconTone={colors.mint}
+          disabled={vault.state !== 'ready'}
+          sources={[
+            { label: 'Take a photo', onPress: () => scanRx('camera') },
+            { label: 'Choose a photo', onPress: () => scanRx('library') },
+            { label: 'PDF', onPress: () => scanRx('pdf') },
+          ]}
+        />
+      )}
+      {pickProblem && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {PICK_PROBLEM[pickProblem]}
+        </Text>
+      )}
+      {added && (
+        <View accessibilityRole="alert" style={styles.added}>
+          <CheckIcon />
+          <Text style={styles.addedText}>{added}</Text>
+        </View>
+      )}
+
+      {loaded && (
         <Pressable accessibilityRole="button" onPress={openAdd} style={styles.addByHand}>
           <Text style={styles.addByHandText}>+ Add medicine by hand</Text>
         </Pressable>
       )}
 
       <AddSheet key={sheetKey} visible={adding} pregnancyId={pregnancyId} today={day} onClose={() => setAdding(false)} />
+      {rx && (
+        <RxSheet
+          key={rx.key}
+          file={rx.file}
+          pregnancyId={pregnancyId}
+          week={weeks !== null && weeks >= 1 && weeks <= 45 ? weeks : null}
+          today={day}
+          onClose={() => setRx(null)}
+          onByHand={() => {
+            setRx(null);
+            // iOS won't show a sheet while another is still sliding away.
+            setTimeout(openAdd, 400);
+          }}
+          onAdded={(count) => {
+            setRx(null);
+            setAdded(`${count === 1 ? '1 medicine' : `${count} medicines`} added from your prescription`);
+          }}
+        />
+      )}
     </Screen>
   );
 }
@@ -210,6 +294,7 @@ function MedRow({
           <Text muted style={styles.medDose} numberOfLines={2}>
             {line}
           </Text>
+          {med.end_date && <Text variant="caption">{untilLine(med.end_date)}</Text>}
           {dose && who && (
             <Text variant="caption">
               {who} marked it taken · {timeOf(dose.taken_at)}
@@ -286,6 +371,206 @@ function AddSheet({
       <View style={styles.buttons}>
         <Button label="Cancel" onPress={onClose} style={styles.half} />
         <Button label={add.isPending ? 'Adding…' : 'Add'} variant="dark" disabled={add.isPending} onPress={save} style={styles.half} />
+      </View>
+    </BottomSheet>
+  );
+}
+
+function RxSheet({
+  file,
+  pregnancyId,
+  week,
+  today,
+  onClose,
+  onByHand,
+  onAdded,
+}: {
+  file: PickedFile;
+  pregnancyId: string;
+  week: number | null;
+  today: string;
+  onClose: () => void;
+  onByHand: () => void;
+  onAdded: (count: number) => void;
+}) {
+  const scan = useScanPrescription();
+  const add = useAddMedications(pregnancyId);
+  const [items, setItems] = useState<RxItem[]>([]);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const read = () =>
+    scan.mutate({ pregnancyId, file, week }, { onSuccess: (draft) => setItems(rxItems(draft.meds)) });
+
+  // Starts reading as soon as the sheet opens.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    read();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const reading = scan.isPending || scan.isIdle;
+  const failure = scan.error instanceof ScanFailure ? scan.error.code : 'failed';
+  const draft = scan.data;
+  const set = (index: number, patch: Partial<RxItem>) => setItems((all) => all.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+  const count = items.filter((i) => i.on && i.name.trim()).length;
+
+  const submit = () => {
+    const parsed = rowsFromRx(items, today);
+    if (!parsed.ok) return setProblem(parsed.error);
+    setProblem(null);
+    add.mutate(parsed.rows, { onSuccess: () => onAdded(parsed.rows.length) });
+  };
+
+  const writtenOn = draft?.date
+    ? new Date(`${draft.date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    : '';
+
+  return (
+    <BottomSheet visible onClose={onClose} title={reading ? 'Scanning prescription' : 'Check medicines'}>
+      <View style={styles.fileRow}>
+        <View style={styles.preview}>
+          {file.mediaType === 'image' ? (
+            <Image source={{ uri: file.uri }} style={styles.previewImage} accessibilityLabel="Prescription" />
+          ) : (
+            <Text style={styles.pdf}>PDF</Text>
+          )}
+          {reading && <ScanLine height={108} />}
+        </View>
+        <View style={styles.fileText}>
+          {reading && (
+            <>
+              <Text style={styles.readingTitle} accessibilityLiveRegion="polite">
+                Reading the handwriting…
+              </Text>
+              <Text muted style={styles.small}>
+                Finding medicines, doses and timing
+              </Text>
+            </>
+          )}
+          {draft && (
+            <>
+              <View style={styles.aiBadge}>
+                <Text style={styles.aiBadgeText}>Filled by AI · check before adding</Text>
+              </View>
+              {(draft.doctor || writtenOn) && <Text style={styles.medName}>{[draft.doctor, writtenOn].filter(Boolean).join(' · ')}</Text>}
+              <Text muted style={styles.small}>
+                {draft.meds.length === 1 ? '1 medicine found' : `${draft.meds.length} medicines found`}
+              </Text>
+            </>
+          )}
+        </View>
+      </View>
+
+      {reading && (
+        <Text muted style={styles.small}>
+          The file goes to Claude, Anthropic&apos;s AI, to be read. It isn&apos;t kept, and nothing is added until you check it.
+        </Text>
+      )}
+
+      {scan.isError && (
+        <View style={styles.failure}>
+          <Text accessibilityRole="alert" style={styles.error}>
+            {FAILURE_TEXT[failure]}
+          </Text>
+          <View style={styles.buttons}>
+            {failure !== 'daily_limit' && failure !== 'not_set_up' && failure !== 'too_large' && (
+              <Button label="Try again" onPress={read} style={styles.half} />
+            )}
+            <Button label="Add by hand" variant="dark" onPress={onByHand} style={styles.half} />
+          </View>
+        </View>
+      )}
+
+      {draft && draft.meds.length === 0 && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          Couldn&apos;t find any medicines on it. Try a clearer photo, or add them by hand.
+        </Text>
+      )}
+      {draft && draft.unreadable_lines.length > 0 && (
+        <View style={styles.unreadable}>
+          <Text style={styles.unreadableTitle}>Couldn&apos;t read clearly, check the paper:</Text>
+          {draft.unreadable_lines.map((line, i) => (
+            <Text key={i} style={styles.small}>
+              · {line}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      {items.map((item, i) => (
+        <View key={i} style={[styles.rxCard, !item.on && styles.rxCardOff]}>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: item.on }}
+            accessibilityLabel={`Include ${item.name || 'this medicine'}`}
+            onPress={() => set(i, { on: !item.on })}
+            style={[styles.rxBox, item.on && styles.rxBoxOn]}>
+            {item.on && <CheckIcon />}
+          </Pressable>
+          <View style={styles.rxFields}>
+            <TextInput
+              accessibilityLabel="Medicine name"
+              value={item.name}
+              onChangeText={(t) => set(i, { name: t })}
+              maxLength={NAME_MAX}
+              style={[styles.rxInput, styles.rxName]}
+            />
+            <TextInput
+              accessibilityLabel={`Dose for ${item.name}`}
+              value={item.dose}
+              onChangeText={(t) => set(i, { dose: t })}
+              placeholder="As prescribed"
+              placeholderTextColor={colors.inkMuted}
+              maxLength={DOSE_MAX}
+              style={[styles.rxInput, styles.rxDose]}
+            />
+            <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel={`When to take ${item.name}`}>
+              {TIMES.map((t) => (
+                <Chip key={t.key} label={t.label} selected={item.time === t.key} onPress={() => set(i, { time: t.key })} />
+              ))}
+            </View>
+            <View style={styles.daysRow}>
+              <Text muted style={styles.small}>
+                For
+              </Text>
+              <TextInput
+                accessibilityLabel={`Days to take ${item.name}`}
+                value={item.days}
+                onChangeText={(t) => set(i, { days: t })}
+                placeholder="—"
+                placeholderTextColor={colors.inkMuted}
+                keyboardType="number-pad"
+                maxLength={3}
+                style={[styles.rxInput, styles.daysInput]}
+              />
+              <Text muted style={styles.small}>
+                {item.days.trim() ? 'days' : 'days (empty: ongoing)'}
+              </Text>
+            </View>
+            {!!item.written && <Text variant="caption">Written as “{item.written}”</Text>}
+          </View>
+        </View>
+      ))}
+      {items.length > 0 && <Text variant="caption">AI can misread handwriting. Match each line with the paper before adding.</Text>}
+
+      {(problem || add.isError) && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {problem ?? 'Couldn’t add them. Try again.'}
+        </Text>
+      )}
+      <View style={styles.buttons}>
+        <Button label="Cancel" onPress={onClose} style={styles.half} />
+        {!scan.isError && (
+          <Button
+            label={reading ? 'Reading…' : add.isPending ? 'Adding…' : count === 1 ? 'Add 1 medicine' : `Add ${count} medicines`}
+            variant="dark"
+            disabled={reading || add.isPending || count === 0}
+            onPress={submit}
+            style={styles.half}
+          />
+        )}
       </View>
     </BottomSheet>
   );
@@ -407,4 +692,81 @@ const styles = StyleSheet.create({
   error: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.purpleDark },
   buttons: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
+  added: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.mint,
+  },
+  addedText: { flex: 1, fontFamily: fonts.bodyHeavy, fontSize: 14, color: colors.ink },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  preview: {
+    width: 84,
+    height: 108,
+    borderRadius: 16,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewImage: { width: '100%', height: '100%' },
+  pdf: { fontFamily: fonts.bodyHeavy, fontSize: 13, color: colors.ink },
+  fileText: { flex: 1, minWidth: 0, gap: 4 },
+  readingTitle: { fontFamily: fonts.bodyHeavy, fontSize: 15, color: colors.ink },
+  small: { fontSize: 13 },
+  aiBadge: {
+    alignSelf: 'flex-start',
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.yellow,
+  },
+  aiBadgeText: { fontFamily: fonts.bodyHeavy, fontSize: 12, color: colors.ink },
+  failure: { gap: 12 },
+  unreadable: { gap: 2, padding: 12, borderRadius: 16, backgroundColor: colors.line },
+  unreadableTitle: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.ink },
+  rxCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 12,
+    borderRadius: 20,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.surface,
+  },
+  rxCardOff: { opacity: 0.55 },
+  rxBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: border.width,
+    borderColor: border.color,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rxBoxOn: { backgroundColor: colors.mint },
+  rxFields: { flex: 1, minWidth: 0, gap: 6 },
+  rxInput: {
+    borderBottomWidth: border.width,
+    borderBottomColor: colors.lilac,
+    borderStyle: 'dashed',
+    paddingVertical: 4,
+    fontFamily: fonts.body,
+    color: colors.ink,
+  },
+  rxName: { fontFamily: fonts.bodyHeavy, fontSize: 16 },
+  rxDose: { fontSize: 14 },
+  daysRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  daysInput: { width: 52, fontSize: 15, textAlign: 'center' },
 });

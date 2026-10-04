@@ -15,6 +15,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Button, Text } from '@/components';
+import { AppLock } from '@/components/AppLock';
 import { useCopyOldData } from '@/lib/copyOldData';
 import { useMembership } from '@/lib/data';
 import { queryClient } from '@/lib/queryClient';
@@ -98,6 +99,7 @@ function RootNavigator() {
         </Stack.Protected>
         <Stack.Screen name="auth/callback" />
       </Stack>
+      {signedIn && <AppLock />}
     </VaultProvider>
   );
 }

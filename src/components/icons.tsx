@@ -103,3 +103,33 @@ export function ReportIcon({ size = 22, color = colors.ink }: IconProps) {
     </Svg>
   );
 }
+
+/** The camera on the design's "Snap your plate" card. */
+export function CameraIcon({ size = 28, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+      <Circle cx={12} cy={13} r={3.5} />
+    </Svg>
+  );
+}
+
+/** The framed page on the design's "Scan a prescription" card. */
+export function ScanIcon({ size = 28, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" />
+      <Path d="M8 9h8M8 12h8M8 15h5" />
+    </Svg>
+  );
+}
+
+/** A padlock, for the app lock. */
+export function LockIcon({ size = 28, color = colors.ink }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x={5} y={11} width={14} height={10} rx={2} />
+      <Path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </Svg>
+  );
+}

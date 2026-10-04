@@ -43,6 +43,9 @@ export function createSyncRunner(run: () => Promise<SyncResult>, onDone: (result
   };
 }
 
+/** How long to wait before trying again after a sync fails. */
+export const RETRY_MS = 30_000;
+
 export type VaultSyncStatus = { syncing: boolean; error: unknown; lastSyncedAt: Date | null };
 
 /**
@@ -101,6 +104,13 @@ export function useVaultSync({
       appState.remove();
     };
   }, [runner, pregnancyId]);
+
+  // Offline, or the server didn't answer: keep trying while the app is open.
+  useEffect(() => {
+    if (!runner || !status.error) return;
+    const timer = setTimeout(() => runner.request(), RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [runner, status.error]);
 
   return { ...status, requestSync: () => runner?.request() ?? Promise.resolve() };
 }

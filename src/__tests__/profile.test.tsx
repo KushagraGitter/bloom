@@ -17,6 +17,31 @@ jest.mock('@/lib/notifications', () => ({
   askForPermission: jest.fn(),
   sendTestReminder: jest.fn(),
   openSystemSettings: jest.fn(),
+  clearScheduled: jest.fn(async () => {}),
+}));
+
+jest.mock('expo-print', () => ({ printToFileAsync: jest.fn(async () => ({ uri: 'file:///cache/summary.pdf' })) }));
+jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(async () => true), shareAsync: jest.fn(async () => {}) }));
+jest.mock('expo-file-system', () => {
+  const written: Record<string, string> = {};
+  class File {
+    uri: string;
+    constructor(dir: string, name: string) {
+      this.uri = `${dir}/${name}`;
+    }
+    create() {}
+    write(content: string) {
+      written[this.uri] = content;
+    }
+  }
+  return { File, Paths: { cache: 'file:///cache' }, __written: written };
+});
+
+jest.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK: 0,
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => {}),
+  deleteItemAsync: jest.fn(async () => {}),
 }));
 
 jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));
@@ -93,7 +118,9 @@ jest.mock('@/lib/supabase', () => {
     calls.push({ table: fn, op: 'rpc', value: args, filters: {} });
     return { data: { id: 'i1', pregnancy_id: 'p1', code: '123456', expires_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString() }, error: null };
   });
-  return { isSupabaseConfigured: true, supabase: { from, rpc, __calls: calls } };
+  const functions = { invoke: jest.fn(async () => ({ data: { deleted: true }, error: null })) };
+  const auth = { signOut: jest.fn(async () => ({ error: null })) };
+  return { isSupabaseConfigured: true, supabase: { from, rpc, functions, auth, __calls: calls } };
 });
 
 const calls = () => (supabase as unknown as { __calls: { table: string; op: string; value?: unknown }[] }).__calls;
@@ -233,5 +260,95 @@ describe('Profile reminders and the phone’s permission', () => {
     await loaded();
     await fireEvent.press(await screen.findByRole('button', { name: 'Send a test reminder' }));
     expect(await screen.findByText('Couldn’t send it')).toBeTruthy();
+  });
+});
+
+describe('Profile download my data', () => {
+  const Print = jest.requireMock<{ printToFileAsync: jest.Mock }>('expo-print');
+  const Sharing = jest.requireMock<{ isAvailableAsync: jest.Mock; shareAsync: jest.Mock }>('expo-sharing');
+  const written = jest.requireMock<{ __written: Record<string, string> }>('expo-file-system').__written;
+
+  beforeEach(() => {
+    Print.printToFileAsync.mockClear();
+    Sharing.shareAsync.mockClear();
+    Sharing.isAvailableAsync.mockResolvedValue(true);
+  });
+
+  it('makes a PDF summary from the vault and opens the share sheet', async () => {
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'm1', pregnancyId: 'p1', kind: 'medication', data: { name: 'Folic acid', dose: '5 mg', time_of_day: 'morning' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Download PDF summary' }));
+    await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledWith('file:///cache/summary.pdf', expect.objectContaining({ mimeType: 'application/pdf' })));
+    expect(Print.printToFileAsync.mock.calls[0][0].html).toContain('Folic acid');
+  });
+
+  it('writes every record to a JSON file and shares it', async () => {
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'q1', pregnancyId: 'p1', kind: 'question', data: { text: 'Iron?' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Download all data (JSON)' }));
+    await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalled());
+    const [uri, options] = Sharing.shareAsync.mock.calls[0];
+    expect(uri).toMatch(/^file:\/\/\/cache\/bloom-data-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(options).toMatchObject({ mimeType: 'application/json' });
+    expect(JSON.parse(written[uri]).records.question).toEqual([expect.objectContaining({ id: 'q1', data: { text: 'Iron?' } })]);
+  });
+
+  it('says so when the phone cannot share files', async () => {
+    Sharing.isAvailableAsync.mockResolvedValue(false);
+    const { vault } = await readyVault();
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Download PDF summary' }));
+    expect(await screen.findByText('This phone can’t share files from Bloom.')).toBeTruthy();
+    expect(Print.printToFileAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('Profile delete account', () => {
+  const sb = supabase as unknown as { functions: { invoke: jest.Mock }; auth: { signOut: jest.Mock } };
+  const SecureStore = jest.requireMock<{ deleteItemAsync: jest.Mock }>('expo-secure-store');
+
+  beforeEach(() => {
+    sb.functions.invoke.mockClear().mockResolvedValue({ data: { deleted: true }, error: null });
+    sb.auth.signOut.mockClear();
+    SecureStore.deleteItemAsync.mockClear();
+  });
+
+  const open = async () => {
+    await fireEvent.press(await screen.findByRole('button', { name: 'Delete account' }));
+    expect(await screen.findByText('Delete your account?')).toBeTruthy();
+  };
+
+  it('waits for DELETE to be typed, then deletes, wipes this phone and signs out', async () => {
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'q1', pregnancyId: 'p1', kind: 'question', data: { text: 'Iron?' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await open();
+    expect(screen.getByText(/everything in it/)).toBeTruthy();
+
+    const confirm = () => screen.getAllByRole('button', { name: 'Delete account' }).at(-1)!;
+    await fireEvent.press(confirm());
+    expect(sb.functions.invoke).not.toHaveBeenCalled();
+
+    await fireEvent.changeText(screen.getByLabelText('Type DELETE to confirm'), 'delete');
+    await fireEvent.press(confirm());
+    await waitFor(() => expect(sb.auth.signOut).toHaveBeenCalledWith({ scope: 'local' }));
+    expect(sb.functions.invoke).toHaveBeenCalledWith('delete-account', { body: { confirm: 'delete my account' } });
+    expect(await store.listAll('p1')).toEqual([]);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalled();
+  });
+
+  it('keeps everything on the phone when the server could not delete', async () => {
+    sb.functions.invoke.mockResolvedValue({ data: null, error: { name: 'FunctionsFetchError', context: {} } });
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'q1', pregnancyId: 'p1', kind: 'question', data: { text: 'Iron?' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await open();
+    await fireEvent.changeText(screen.getByLabelText('Type DELETE to confirm'), 'DELETE');
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Delete account' }).at(-1)!);
+    expect(await screen.findByText(/Couldn’t reach Bloom.*Nothing was deleted/)).toBeTruthy();
+    expect(await store.listAll('p1')).toHaveLength(1);
+    expect(sb.auth.signOut).not.toHaveBeenCalled();
   });
 });

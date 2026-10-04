@@ -1,5 +1,9 @@
 import {
   AMOUNT_MAX,
+  plateAmounts,
+  plateFood,
+  plateItems,
+  type ScannedFood,
   CRAVING_MAX,
   DEFAULT_GOALS,
   FOOD_MAX,
@@ -472,5 +476,53 @@ describe('cravings', () => {
       ok: false,
       error: `Keep it to ${CRAVING_MAX} characters or fewer.`,
     });
+  });
+});
+
+describe('meals read from a photo', () => {
+  const food = (name: string, over: Partial<ScannedFood> = {}): ScannedFood => ({
+    name,
+    portion: '1',
+    kcal: null,
+    protein_g: null,
+    iron_mg: null,
+    calcium_mg: null,
+    folate_mcg: null,
+    fibre_g: null,
+    ...over,
+  });
+
+  it('keeps every food to start with, with only the numbers the AI gave', () => {
+    expect(plateItems([food('Idli', { kcal: 120, iron_mg: 0.4, fibre_g: -1 })])).toEqual([
+      { name: 'Idli', portion: '1', amounts: { kcal: 120, iron: 0.4 }, on: true },
+    ]);
+  });
+
+  it('names the meal after the kept foods, stopping before it gets too long', () => {
+    const items = plateItems([food('Idli'), food('Sambar'), food('Chutney')]);
+    items[1].on = false;
+    expect(plateFood(items)).toBe('Idli, Chutney');
+    expect(plateFood(plateItems([food('A'.repeat(FOOD_MAX - 2)), food('Rice')]))).toBe('A'.repeat(FOOD_MAX - 2));
+    expect(plateFood([])).toBe('');
+  });
+
+  it('adds up the kept foods, leaving a number none of them has empty', () => {
+    const items = plateItems([
+      food('Dal', { kcal: 180, iron_mg: 2.15 }),
+      food('Rice', { kcal: 210 }),
+      food('Roti', { kcal: 140, iron_mg: 1.5 }),
+    ]);
+    items[1].on = false;
+    expect(plateAmounts(items)).toEqual({ kcal: '320', iron: '3.7' });
+    expect(plateAmounts(plateItems([food('Big', { kcal: 9000 }), food('Bigger', { kcal: 9000 })]))).toEqual({ kcal: String(AMOUNT_MAX) });
+  });
+
+  it('marks a meal read by AI, and keeps that mark when read back', () => {
+    const parsed = newMealData({ slot: 'lunch', food: 'Idli', time: '', note: '', amounts: {}, ai: true }, '2026-10-03', 'me');
+    expect(parsed.ok && parsed.data.ai).toBe(true);
+    expect(parseMeal(parsed.ok ? parsed.data : null)).toMatchObject({ ai: true });
+    const typed = newMealData({ slot: 'lunch', food: 'Idli', time: '', note: '', amounts: {} }, '2026-10-03', 'me');
+    expect(typed.ok && 'ai' in typed.data).toBe(false);
+    expect(parseMeal({ day: '2026-10-03', slot: 'lunch', food: 'Idli', ai: 'yes' })).not.toHaveProperty('ai');
   });
 });

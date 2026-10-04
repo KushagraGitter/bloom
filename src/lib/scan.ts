@@ -8,9 +8,10 @@ import type { ScanDraft } from '@/lib/reports';
 import { supabase } from '@/lib/supabase';
 
 /**
- * Getting a report to the AI: pick a photo or PDF, shrink a photo on the
- * phone, and send it to the `scan` Edge Function, which passes it to Claude
- * and returns what it read. The file is not uploaded anywhere else or kept.
+ * Getting a report, a prescription or a photo of a meal to the AI: pick a
+ * photo or PDF, shrink a photo on the phone, and send it to the `scan` Edge
+ * Function, which passes it to Claude and returns what it read. The file is
+ * not uploaded anywhere else or kept.
  */
 
 /** Claude reads images up to about this long edge; bigger only costs more. */
@@ -31,7 +32,7 @@ export type PickedFile = {
 
 export type PickFileResult = { status: 'picked'; file: PickedFile } | { status: 'cancelled' } | { status: 'denied' } | { status: 'too_large' };
 
-export async function pickReportFile(source: ScanSource): Promise<PickFileResult> {
+export async function pickScanFile(source: ScanSource): Promise<PickFileResult> {
   if (source === 'pdf') {
     const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true, multiple: false });
     const asset = result.canceled ? undefined : result.assets[0];
@@ -80,6 +81,12 @@ export async function fileForScan(file: PickedFile): Promise<{ mediaType: 'image
   }
 }
 
+/** What to say when a file couldn't be picked. */
+export const PICK_PROBLEM = {
+  denied: 'Bloom needs permission to use the camera or photos. You can allow it in your phone’s Settings.',
+  too_large: 'That PDF is over 10 MB. Try a photo of each page instead.',
+} as const;
+
 export type ScanFailureCode =
   | 'too_large'
   | 'daily_limit'
@@ -104,7 +111,7 @@ export const FAILURE_TEXT: Record<ScanFailureCode, string> = {
   unreadable: 'The AI couldn’t read this one. Try a clearer photo, or fill it in by hand.',
   not_member: 'Couldn’t check your household. Close Bloom, open it again and try once more.',
   offline: 'Couldn’t reach the AI. Check your connection and try again.',
-  failed: 'Something went wrong reading the report. Try again, or fill it in by hand.',
+  failed: 'Something went wrong reading it. Try again, or fill it in by hand.',
 };
 
 const FROM_SERVER: Record<string, ScanFailureCode> = {
@@ -117,20 +124,58 @@ const FROM_SERVER: Record<string, ScanFailureCode> = {
   bad_request: 'failed',
 };
 
-/** Sends the file to the `scan` function and returns the AI's draft. */
-export async function scanReport(input: {
+export type ScanInput = {
   pregnancyId: string;
   file: { mediaType: string; data: string };
   week: number | null;
-}): Promise<ScanDraft> {
+};
+
+/** Sends the file to the `scan` function and returns the AI's draft, unchecked. */
+async function scan<T>(kind: 'report' | 'meal' | 'rx', input: ScanInput): Promise<T> {
   const { data, error } = await supabase.functions.invoke('scan', {
-    body: { kind: 'report', pregnancyId: input.pregnancyId, file: input.file, week: input.week },
+    body: { kind, pregnancyId: input.pregnancyId, file: input.file, week: input.week },
   });
   if (error) throw new ScanFailure(await failureOf(error));
-  const draft = (data as { draft?: ScanDraft } | null)?.draft;
+  const draft = (data as { draft?: T } | null)?.draft;
   if (!draft) throw new ScanFailure('failed');
   return draft;
 }
+
+export const scanReport = (input: ScanInput) => scan<ScanDraft>('report', input);
+export const scanMeal = (input: ScanInput) => scan<MealScanDraft>('meal', input);
+export const scanPrescription = (input: ScanInput) => scan<RxScanDraft>('rx', input);
+
+/** What the function sends back for a meal (see supabase/functions/scan/handler.ts). */
+export type MealScanDraft = {
+  items: {
+    name: string;
+    portion: string;
+    kcal: number | null;
+    protein_g: number | null;
+    iron_mg: number | null;
+    calcium_mg: number | null;
+    folate_mcg: number | null;
+    fibre_g: number | null;
+  }[];
+  confidence: 'high' | 'medium' | 'low';
+  unreadable_lines: string[];
+};
+
+/** What the function sends back for a prescription. */
+export type RxScanDraft = {
+  doctor: string;
+  date: string;
+  meds: {
+    name: string;
+    strength: string;
+    dose: string;
+    frequency: string;
+    time_of_day: 'morning' | 'afternoon' | 'evening';
+    duration_days: number | null;
+    instructions: string;
+  }[];
+  unreadable_lines: string[];
+};
 
 async function failureOf(error: { name?: string; context?: unknown }): Promise<ScanFailureCode> {
   const response = error.context as { status?: number; json?: () => Promise<unknown> } | undefined;
