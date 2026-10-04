@@ -21,6 +21,7 @@ src/app/            routes (each design artboard becomes one)
   (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment), Meals, Vitamins and Progress (weekly charts, 7-day averages, bump diary); Reports is a placeholder
   appointments.tsx  month calendar, what is coming up, book and cancel appointments
   mood.tsx          mood, symptoms and a note, saved as entries with a history (opened from Today's tools)
+  contractions.tsx  contraction timer: lengths, gaps and counts per session, earlier sessions, her own "when to call" notes
   profile.tsx       edit details, reminders, units, partner invite code
   household-key.tsx show the household key as a QR code or recovery phrase, or take it on a new phone
   dev/components    dev-only gallery of the shared components
@@ -233,6 +234,9 @@ record the same id on both phones when it must not be doubled. The hooks in
 | `bump-image`                | the full photo of one `bump-photo` | random |
 | `mood`                      | mood entry: mood, symptoms, note | random |
 | `symptom`                   | symptom she added to the list | random |
+| `contraction`               | timed contraction: session, start, end (null while going) | random |
+| `contraction-session-end`   | session she ended herself | the session's id |
+| `contraction-plan`          | household: what her doctor or midwife said about when to call, hospital, phone | `stableId('contraction-plan', household)` |
 | `meta.copied`               | household, once its old rows are copied | `stableId('copied-old-tables', household)` |
 
 The pregnancy details in the vault are laid over the `pregnancies` row, which
