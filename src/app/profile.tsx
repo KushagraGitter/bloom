@@ -7,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { BackButton, BottomSheet, Button, Card, Chip, DateField, Screen, Text, TextField, Toggle } from '@/components';
 import { authenticate, lockAvailability, useAppLock } from '@/lib/appLock';
 import { signOut } from '@/lib/auth';
+import { CONFIRM_WORD, DELETE_FAILURE_TEXT, DeleteFailure, useDeleteAccount } from '@/lib/deleteAccount';
 import {
   useCreateInvite,
   useMembers,
@@ -140,7 +141,7 @@ export default function ProfileScreen() {
 
       <UnitsSetting pregnancyId={pregnancy.id} units={pregnancy.units} canEdit={isOwner} />
 
-      <YourData pregnancy={pregnancy} name={name} />
+      <YourData pregnancy={pregnancy} name={name} isOwner={isOwner} />
 
       <Button label="Sign out" onPress={() => signOut().catch(() => {})} style={styles.signOut} />
       {__DEV__ && <Button label="Component gallery" onPress={() => router.push('/dev/components')} />}
@@ -321,9 +322,10 @@ function AppLockRow() {
 }
 
 /** "Download my data": made on this phone, handed to the share sheet. */
-function YourData({ pregnancy, name }: { pregnancy: Pregnancy; name: string }) {
+function YourData({ pregnancy, name, isOwner }: { pregnancy: Pregnancy; name: string; isOwner: boolean }) {
   const exporting = useExportData(pregnancy, name);
   const [format, setFormat] = useState<ExportFormat | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const run = (f: ExportFormat) => {
     setFormat(f);
@@ -348,7 +350,77 @@ function YourData({ pregnancy, name }: { pregnancy: Pregnancy; name: string }) {
           </Text>
         )}
       </View>
+      <Pressable accessibilityRole="button" onPress={() => setDeleting(true)} style={[styles.row, styles.rowDivider]}>
+        <Text style={[styles.rowLabel, styles.danger]}>Delete account</Text>
+      </Pressable>
+      <DeleteAccountSheet visible={deleting} pregnancy={pregnancy} isOwner={isOwner} onClose={() => setDeleting(false)} />
     </Group>
+  );
+}
+
+function DeleteAccountSheet({
+  visible,
+  pregnancy,
+  isOwner,
+  onClose,
+}: {
+  visible: boolean;
+  pregnancy: Pregnancy;
+  isOwner: boolean;
+  onClose: () => void;
+}) {
+  const members = useMembers(pregnancy.id);
+  const remove = useDeleteAccount(pregnancy.id);
+  const [typed, setTyped] = useState('');
+  const partner = members.data?.find((m) => m.role === 'partner');
+  const owner = members.data?.find((m) => m.user_id === pregnancy.owner_id);
+  const confirmed = typed.trim().toUpperCase() === CONFIRM_WORD;
+
+  const close = () => {
+    if (remove.isPending) return;
+    setTyped('');
+    remove.reset();
+    onClose();
+  };
+
+  return (
+    <BottomSheet visible={visible} onClose={close} title="Delete your account?">
+      {isOwner ? (
+        <>
+          <Text>
+            This deletes your Bloom account and everything in it: your pregnancy details, check-ins, medicines, meals,
+            reports and photos, from this phone and from Bloom&apos;s servers. It can&apos;t be undone.
+          </Text>
+          {partner && (
+            <Text style={styles.danger}>{partner.name?.trim() || 'Your partner'} will lose access too.</Text>
+          )}
+          <Text muted>Download your data first if you want to keep a copy.</Text>
+        </>
+      ) : (
+        <Text>
+          This deletes your Bloom account and takes Bloom off this phone. {owner?.name?.trim() || 'The person who shared it'}{' '}
+          keeps their data; you&apos;ll need a new invite to see it again.
+        </Text>
+      )}
+      <View style={styles.fieldRow}>
+        <TextField label={`Type ${CONFIRM_WORD} to confirm`} value={typed} onChangeText={setTyped} autoCapitalize="characters" autoCorrect={false} />
+      </View>
+      {remove.isError && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {DELETE_FAILURE_TEXT[remove.error instanceof DeleteFailure ? remove.error.code : 'failed']}
+        </Text>
+      )}
+      <View style={styles.inviteButtons}>
+        <Button label="Cancel" onPress={close} disabled={remove.isPending} style={styles.flex} />
+        <Button
+          label={remove.isPending ? 'Deleting…' : 'Delete account'}
+          variant="dark"
+          disabled={!confirmed || remove.isPending}
+          onPress={() => remove.mutate()}
+          style={styles.flex}
+        />
+      </View>
+    </BottomSheet>
   );
 }
 

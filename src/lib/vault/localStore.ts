@@ -96,6 +96,11 @@ function createLocalStore(db: SqlDatabase) {
       return rows.map(toRecord);
     },
 
+    /** Empties this phone's copy of everything, when the account is deleted. */
+    async wipe(): Promise<void> {
+      await db.execAsync('delete from records; delete from sync_state;');
+    },
+
     async dirty(pregnancyId: string): Promise<LocalRecord[]> {
       const rows = await db.getAllAsync<Row>('select * from records where pregnancy_id = ? and dirty = 1 order by updated_at', [
         pregnancyId,

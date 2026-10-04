@@ -10,7 +10,7 @@ gets a login that sees everything and can log on her behalf.
 
 - **App:** Expo (SDK 57) + TypeScript + Expo Router, one codebase for iOS and Android
 - **Data:** TanStack Query, Supabase JS client, Zustand for small UI state
-- **Backend:** Supabase (Postgres with Row Level Security, Auth, Storage, Realtime, one Edge Function)
+- **Backend:** Supabase (Postgres with Row Level Security, Auth, Storage, Realtime, two Edge Functions)
 - **AI:** Claude, called only from the `scan` Edge Function, so no AI key is ever in the app
 
 ## Layout
@@ -32,7 +32,8 @@ src/lib/            Supabase client, auth, session, data hooks, readings, profil
   vault/            on-phone record store, encryption, household key and encrypted sync
 supabase/
   migrations/       SQL schema and RLS policies
-  functions/scan/   Edge Function that sends a report to Claude and returns what it read
+  functions/scan/   Edge Function that sends a report, plate photo or prescription to Claude and returns what it read
+  functions/delete-account/  Edge Function that deletes the signed-in account
   tests/            RLS checks against a throwaway Postgres
 ```
 
@@ -178,8 +179,11 @@ Good to know:
   them. Bloom never labels a result normal or abnormal, and every AI summary
   carries "Not a diagnosis. Go over results with your doctor."
 - The week is worked out from the date printed on the report when there is one.
-- Only lab and scan reports are scanned for now. Prescription scanning (into
-  Vitamins) and meal photos ("Snap your plate") can reuse the same function later.
+- The same function reads plate photos for Meals ("Snap your plate": the foods
+  it spots and rough amounts, each one a chip she can untick) and prescriptions
+  for Vitamins (each medicine, dose, time of day and number of days, ticked off
+  before they're added; a course with a length ends on its own). Neither is
+  saved until she confirms it.
 
 ### Set up the scan function
 
@@ -191,6 +195,30 @@ Good to know:
 Until it is deployed, the app says AI reading isn't switched on yet and reports
 can still be added by hand. `npm test` covers the function's logic
 (`supabase/functions/scan/handler.ts`); `index.ts` is the Deno entry point.
+
+## Privacy settings on Profile
+
+- **App lock** (`src/lib/appLock.ts`, `src/components/AppLock.tsx`): Face ID,
+  fingerprint or the phone's passcode before Bloom opens, and again after a
+  minute in the background. It is a setting on each phone, kept in SecureStore.
+- **Download my data** (`src/lib/exportData.ts`, `src/lib/useExport.ts`): a
+  PDF summary (details, current medicines, recent check-ins, appointments,
+  reports with the lab's ranges, questions, moods) and a JSON file with every
+  record. Both are made on the phone from its own copy and handed to the share
+  sheet; nothing is uploaded.
+- **Delete account** (`src/lib/deleteAccount.ts`): she types DELETE, the
+  `delete-account` function deletes her auth user, and the database's
+  `on delete cascade` removes her profile and, for the owner, the pregnancy
+  with its members, invites, vault records and scan counts (a partner deleting
+  removes only their own membership). The phone then empties its database,
+  forgets the household key, turns the app lock off, clears reminders and
+  signs out. If the function can't be reached, nothing is deleted anywhere.
+
+### Set up the delete-account function
+
+Deploy it with `npx supabase functions deploy delete-account` (keep JWT
+verification on). It uses `SUPABASE_SERVICE_ROLE_KEY`, which Supabase provides
+to Edge Functions; that key is never in the app.
 
 ## Reminders
 

@@ -17,6 +17,7 @@ jest.mock('@/lib/notifications', () => ({
   askForPermission: jest.fn(),
   sendTestReminder: jest.fn(),
   openSystemSettings: jest.fn(),
+  clearScheduled: jest.fn(async () => {}),
 }));
 
 jest.mock('expo-print', () => ({ printToFileAsync: jest.fn(async () => ({ uri: 'file:///cache/summary.pdf' })) }));
@@ -35,6 +36,13 @@ jest.mock('expo-file-system', () => {
   }
   return { File, Paths: { cache: 'file:///cache' }, __written: written };
 });
+
+jest.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK: 0,
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => {}),
+  deleteItemAsync: jest.fn(async () => {}),
+}));
 
 jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));
 
@@ -110,7 +118,9 @@ jest.mock('@/lib/supabase', () => {
     calls.push({ table: fn, op: 'rpc', value: args, filters: {} });
     return { data: { id: 'i1', pregnancy_id: 'p1', code: '123456', expires_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString() }, error: null };
   });
-  return { isSupabaseConfigured: true, supabase: { from, rpc, __calls: calls } };
+  const functions = { invoke: jest.fn(async () => ({ data: { deleted: true }, error: null })) };
+  const auth = { signOut: jest.fn(async () => ({ error: null })) };
+  return { isSupabaseConfigured: true, supabase: { from, rpc, functions, auth, __calls: calls } };
 });
 
 const calls = () => (supabase as unknown as { __calls: { table: string; op: string; value?: unknown }[] }).__calls;
@@ -292,5 +302,53 @@ describe('Profile download my data', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Download PDF summary' }));
     expect(await screen.findByText('This phone can’t share files from Bloom.')).toBeTruthy();
     expect(Print.printToFileAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('Profile delete account', () => {
+  const sb = supabase as unknown as { functions: { invoke: jest.Mock }; auth: { signOut: jest.Mock } };
+  const SecureStore = jest.requireMock<{ deleteItemAsync: jest.Mock }>('expo-secure-store');
+
+  beforeEach(() => {
+    sb.functions.invoke.mockClear().mockResolvedValue({ data: { deleted: true }, error: null });
+    sb.auth.signOut.mockClear();
+    SecureStore.deleteItemAsync.mockClear();
+  });
+
+  const open = async () => {
+    await fireEvent.press(await screen.findByRole('button', { name: 'Delete account' }));
+    expect(await screen.findByText('Delete your account?')).toBeTruthy();
+  };
+
+  it('waits for DELETE to be typed, then deletes, wipes this phone and signs out', async () => {
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'q1', pregnancyId: 'p1', kind: 'question', data: { text: 'Iron?' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await open();
+    expect(screen.getByText(/everything in it/)).toBeTruthy();
+
+    const confirm = () => screen.getAllByRole('button', { name: 'Delete account' }).at(-1)!;
+    await fireEvent.press(confirm());
+    expect(sb.functions.invoke).not.toHaveBeenCalled();
+
+    await fireEvent.changeText(screen.getByLabelText('Type DELETE to confirm'), 'delete');
+    await fireEvent.press(confirm());
+    await waitFor(() => expect(sb.auth.signOut).toHaveBeenCalledWith({ scope: 'local' }));
+    expect(sb.functions.invoke).toHaveBeenCalledWith('delete-account', { body: { confirm: 'delete my account' } });
+    expect(await store.listAll('p1')).toEqual([]);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalled();
+  });
+
+  it('keeps everything on the phone when the server could not delete', async () => {
+    sb.functions.invoke.mockResolvedValue({ data: null, error: { name: 'FunctionsFetchError', context: {} } });
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'q1', pregnancyId: 'p1', kind: 'question', data: { text: 'Iron?' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await open();
+    await fireEvent.changeText(screen.getByLabelText('Type DELETE to confirm'), 'DELETE');
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Delete account' }).at(-1)!);
+    expect(await screen.findByText(/Couldn’t reach Bloom.*Nothing was deleted/)).toBeTruthy();
+    expect(await store.listAll('p1')).toHaveLength(1);
+    expect(sb.auth.signOut).not.toHaveBeenCalled();
   });
 });
