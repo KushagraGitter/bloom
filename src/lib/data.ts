@@ -536,6 +536,23 @@ export function useAddMedication(pregnancyId: string | undefined) {
   });
 }
 
+/** Adds several medicines at once, such as the ones ticked on a scanned prescription. */
+export function useAddMedications(pregnancyId: string | undefined) {
+  const queryClient = useQueryClient();
+  const vault = useVault();
+  return useMutation({
+    mutationFn: async (rows: MedicationRow[]) => {
+      const now = Date.now();
+      // A millisecond apart, so they list in the prescription's order.
+      for (const [i, row] of rows.entries()) {
+        const data: MedicationData = { end_date: null, ...row, created_at: new Date(now + i).toISOString() };
+        await saveItem(vault, { id: newId(), pregnancyId: pregnancyId!, kind: 'medication', data });
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.meds(pregnancyId ?? 'none') }),
+  });
+}
+
 /** Deletes a medicine and, with it, its history. */
 export function useRemoveMedication(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
