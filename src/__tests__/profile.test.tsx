@@ -3,8 +3,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import type { ReactNode } from 'react';
 
 import ProfileScreen from '@/app/profile';
+import { pregnancyDetailsId } from '@/lib/data';
 import { openSystemSettings, permissionState, sendTestReminder } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
+import { writeRecord } from '@/lib/vault/localStore';
+import { readyVault } from '@/lib/vault/testHelpers';
+import { vaultWrapper } from '@/lib/vault/testWrapper';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn(), canGoBack: () => true, replace: jest.fn() } }));
 jest.mock('@/lib/auth', () => ({ signOut: jest.fn(async () => {}) }));
@@ -14,6 +18,8 @@ jest.mock('@/lib/notifications', () => ({
   sendTestReminder: jest.fn(),
   openSystemSettings: jest.fn(),
 }));
+
+jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));
 
 jest.mock('@/lib/session', () => ({
   useSession: () => ({ session: { user: { id: 'me', email: 'ananya@example.com' } }, loading: false }),
@@ -125,12 +131,34 @@ describe('Profile', () => {
     expect(calls()).toContainEqual(expect.objectContaining({ table: 'new_invite', op: 'rpc', value: { p_pregnancy_id: 'p1' } }));
   });
 
-  it('edits a detail through the sheet', async () => {
-    await render(<ProfileScreen />, { wrapper });
+  it('edits a detail into the vault, not the readable pregnancy row', async () => {
+    const { vault, store } = await readyVault();
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
     await fireEvent.press(await screen.findByRole('button', { name: 'Nickname: not set. Edit' }));
     await fireEvent.changeText(screen.getByLabelText('Nickname'), 'Peanut');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-    expect(calls()).toContainEqual(expect.objectContaining({ table: 'pregnancies', op: 'update', value: { nickname: 'Peanut' } }));
+
+    expect(await screen.findByRole('button', { name: 'Nickname: Peanut. Edit' })).toBeTruthy();
+    const record = await store.get(pregnancyDetailsId('p1'));
+    expect(record).toMatchObject({ kind: 'pregnancy', dirty: true, data: { nickname: 'Peanut', blood_group: 'B+', lmp_date: '2026-04-15' } });
+    expect(calls().filter((c) => c.table === 'pregnancies')).toEqual([]);
+  });
+
+  it('shows the details kept in the vault over the server’s copy', async () => {
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: pregnancyDetailsId('p1'), pregnancyId: 'p1', kind: 'pregnancy', data: { blood_group: 'O+', height_cm: 170 } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    expect(await screen.findByText('170 cm')).toBeTruthy();
+    expect(screen.getByText('O+')).toBeTruthy();
+    expect(screen.queryByText('B+')).toBeNull();
+  });
+
+  it('recalculates the due date when the period date changes', async () => {
+    const { vault, store } = await readyVault();
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await fireEvent.press(await screen.findByRole('button', { name: /^Last period started: .*\. Edit$/ }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(async () => expect((await store.get(pregnancyDetailsId('p1')))?.data).toMatchObject({ lmp_date: '2026-04-15', due_date: '2027-01-20', method: 'lmp' }));
   });
 });
 

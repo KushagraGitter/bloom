@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BottomSheet, Button, CalendarIcon, Card, CheckIcon, Chip, Screen, SmileIcon, Text, TextField, TimerIcon } from '@/components';
+import { VaultNotice } from '@/components/VaultNotice';
 import { cardLine, dayLong, dayNumber, localTime, monthAbbr, nextUp } from '@/lib/appointments';
 import {
   useAppointments,
@@ -93,6 +94,8 @@ export default function TodayScreen() {
           <Text style={styles.avatarText}>{initialOf(name)}</Text>
         </Pressable>
       </View>
+
+      <VaultNotice />
 
       <Card tone={colors.purple} size="hero" elevation="lg" style={styles.hero}>
         <View style={styles.sun} />

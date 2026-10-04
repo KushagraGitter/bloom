@@ -26,7 +26,7 @@ src/app/            routes (each design artboard becomes one)
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields
 src/theme/tokens.ts colours, fonts, borders and shadows from the design
 src/lib/            Supabase client, auth, session, data hooks, readings, profile fields, due-date maths, reminders
-  vault/            on-phone record store, encryption, household key and encrypted sync (not wired to screens yet)
+  vault/            on-phone record store, encryption, household key and encrypted sync
 supabase/
   migrations/       SQL schema and RLS policies
   tests/            RLS checks against a throwaway Postgres
@@ -93,9 +93,10 @@ sees nothing.
 
 Invite redemption is rate-limited to 10 attempts an hour per account.
 
-Readings, medications, doses and appointments are in Supabase's Realtime publication,
-so a tick, a kick or a booking on one phone shows up on the other. The app listens on one channel per
-pregnancy (`useRealtimeSync`, mounted once in the tabs layout).
+The app no longer reads or writes the health columns of `pregnancies` or the
+`readings`, `medications`, `med_doses` and `appointments` tables: that data is in
+the vault (see "Health data on the phone" below). The tables stay until the
+household's data has been copied over and they are emptied by hand.
 
 ## Reminders
 
@@ -152,12 +153,12 @@ Good to know:
 - In a development build, Expo Go included, Profile shows "Send a test
   reminder", which sends one 5 seconds later.
 
-## Health data on the phone (in progress)
+## Health data on the phone
 
 Health data is moving off Supabase's readable tables and onto the phones
 (see the plan doc, option B). The pieces in `src/lib/vault/`:
 
-- `localStore.ts`: every record lives in SQLite on the phone (`expo-sqlite`), and that is what screens will read.
+- `localStore.ts`: every record lives in SQLite on the phone (`expo-sqlite`), and that is what screens read.
 - `crypto.ts`: records are sealed with XChaCha20-Poly1305 under a 32-byte household key, bound to their household and id.
 - `keys.ts`: the key sits in the phone's keychain (`expo-secure-store`) and can be written out as a recovery phrase with a checksum.
 - `sync.ts` and `useVaultSync.ts`: phones upload sealed records to `vault_records` and pull the other phone's. The newest edit of a record wins, deletes travel as sealed tombstones, and a realtime change on `vault_records` tells the other phone to pull.
@@ -174,5 +175,33 @@ by scanning the QR code shown on a phone that has it, or by typing the recovery
 phrase. A key that can't open what the household already saved is refused. The
 web build has no keychain or on-phone database, so it skips all of this.
 
-Not done yet: switching each screen from the Supabase tables to the local store,
-key rotation, and removing the old readable tables.
+Screens read and write through `records.ts`: `useVaultQuery` reads from the
+phone's store (it waits until the phone has the key, and is refreshed after every
+pull), `saveItem` and `removeItems` write and start a sync, and `stableId` gives a
+record the same id on both phones when it must not be doubled. The hooks in
+`src/lib/data.ts` keep their old names and shapes. What each kind holds:
+
+| Kind                        | One record per | Id |
+| --------------------------- | -------------- | -- |
+| `pregnancy`                 | household: LMP, due date, health details, care team, units | `stableId('pregnancy', household)` |
+| `reading.<type>`            | weight, BP, sugar or sleep check-in | random |
+| `tally.<kicks or water>.<day>` | tap, filed under the local day | random |
+| `medication`                | medicine | random |
+| `dose`                      | medicine per day ticked | `stableId('dose', medicine, day)` |
+| `appointment`               | appointment | random |
+| `meta.copied`               | household, once its old rows are copied | `stableId('copied-old-tables', household)` |
+
+The pregnancy details in the vault are laid over the `pregnancies` row, which
+now only matters for its id and owner. Onboarding still creates that row.
+
+On the first sync after a phone gets the key, `useCopyOldData` copies the
+household's old rows (readings, medicines, doses, appointments and the
+pregnancy details) into the vault, once per household. Copied records keep
+their old ids and are dated when they were first saved, so running it on both
+phones, or again, adds nothing twice and never undoes a later edit. It leaves
+the old tables as they are.
+
+Without the key (the partner's phone before pairing, or the web build), the
+health screens show a notice instead of data, and reminders wait.
+
+Not done yet: key rotation, and emptying the old readable tables.

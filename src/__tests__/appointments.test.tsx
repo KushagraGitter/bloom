@@ -1,11 +1,16 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 
 import AppointmentsScreen from '@/app/appointments';
 import { clock, dayLong, dayTitle, monthAbbr, monthName, monthTitle } from '@/lib/appointments';
+import { copyOldData } from '@/lib/copyOldData';
+import type { LocalStore } from '@/lib/vault/localStore';
+import { readyVault } from '@/lib/vault/testHelpers';
+import { vaultWrapper } from '@/lib/vault/testWrapper';
+import type { Vault } from '@/lib/vault/VaultProvider';
+
+jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) },
@@ -41,7 +46,6 @@ jest.mock('@react-native-community/datetimepicker', () => {
 });
 
 type Row = Record<string, unknown>;
-type Call = { op: string; row?: Row; filters?: Row };
 
 // The supabase mock is hoisted above this file's statements, so its data
 // comes from hoisted functions, built on first use.
@@ -55,7 +59,6 @@ function makeDb() {
     place,
   });
   return {
-    calls: [] as Call[],
     failLoad: false,
     failInsert: false,
     failDelete: false,
@@ -63,7 +66,7 @@ function makeDb() {
       role: 'owner',
       pregnancy: { id: 'p1', owner_id: 'me', lmp_date: '2026-04-15', due_date: '2027-01-20', babies: 1, units: 'metric' },
     },
-    // The database sends times as HH:mm:ss.
+    // The old table sent times as HH:mm:ss; the copy into the vault cuts them to HH:mm.
     appointments: [
       appointment('a0', 'Booking visit', '2026-09-20', '10:00:00', 'City Clinic'),
       appointment('a1', 'Blood test', '2026-10-03', '08:00:00', null),
@@ -80,50 +83,42 @@ function mockDb() {
   return mockState;
 }
 
+// Only the membership comes from the server; appointments are in the vault.
 jest.mock('@/lib/supabase', () => {
-  const from = (table: string) => {
-    const db = mockDb();
-    const filters: Row = {};
-    let op = 'select';
-    let pending: Row | undefined;
-    const offline = { data: null, error: new Error('offline') };
-    const run = () => {
-      if (table === 'members') return { data: db.membership, error: null };
-      if (op === 'select') return db.failLoad ? offline : { data: db.appointments, error: null };
-      if (op === 'insert') {
-        if (db.failInsert) return offline;
-        db.calls.push({ op, row: pending });
-        const row = { id: `new-${db.calls.length}`, ...pending, appt_time: pending?.appt_time ? `${pending.appt_time}:00` : null };
-        db.appointments.push(row);
-        return { data: row, error: null };
-      }
-      if (db.failDelete) return offline;
-      db.calls.push({ op, filters: { ...filters } });
-      db.appointments = db.appointments.filter((r) => !Object.entries(filters).every(([k, v]) => r[k] === v));
-      return { data: null, error: null };
-    };
-    const q = {
-      select: () => q,
-      eq: (col: string, value: unknown) => ((filters[col] = value), q),
-      order: () => q,
-      limit: () => q,
-      insert: (row: Row) => ((op = 'insert'), (pending = row), q),
-      delete: () => ((op = 'delete'), q),
-      single: async () => run(),
-      maybeSingle: async () => run(),
-      then: (resolve: (v: unknown) => void) => resolve(run()),
-    };
-    return q;
+  const run = () => ({ data: mockDb().membership, error: null });
+  const q = {
+    select: () => q,
+    eq: () => q,
+    limit: () => q,
+    maybeSingle: async () => run(),
   };
-  return { isSupabaseConfigured: true, supabase: { from } };
+  return { isSupabaseConfigured: true, supabase: { from: () => q } };
 });
 
-function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { gcTime: Infinity } },
-  });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+let vault: Vault;
+let store: LocalStore;
+const SEEDED = ['a0', 'a1', 'a2', 'a3', 'a4'];
+
+/** Puts the test's appointments into this phone's vault, then shows the screen. */
+async function show() {
+  const db = mockDb();
+  ({ vault, store } = await readyVault());
+  await copyOldData(store, 'p1', { pregnancy: null, readings: [], medications: [], doses: [], appointments: db.appointments });
+  const failure = async () => {
+    throw new Error('disk full');
+  };
+  if (db.failLoad) store.list = failure;
+  if (db.failInsert || db.failDelete) store.put = failure;
+  return render(<AppointmentsScreen />, { wrapper: vaultWrapper(vault) });
 }
+
+/** What was booked on this phone during the test. */
+const booked = async () => (await store.list('p1', 'appointment')).filter((r) => !SEEDED.includes(r.id)).map((r) => r.data);
+/** Which of the starting appointments were cancelled. */
+const cancelled = async () => {
+  const left = (await store.list('p1', 'appointment')).map((r) => r.id);
+  return SEEDED.filter((id) => !left.includes(id));
+};
 
 // "Today" is 3 October 2026, 10:00. Only the date is faked, so the waits and
 // timers the tests rely on keep working.
@@ -169,7 +164,7 @@ async function openSheet() {
 
 describe('Appointments', () => {
   it('lists what is coming up, soonest first, leaving out the past', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await screen.findByText('Glucose tolerance test');
 
     expect(screen.getByText('Upcoming')).toBeTruthy();
@@ -183,7 +178,7 @@ describe('Appointments', () => {
   });
 
   it('marks the days that have something booked on the calendar', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await screen.findByText('Glucose tolerance test');
 
     expect(screen.getByText(monthTitle('2026-10'))).toBeTruthy();
@@ -195,7 +190,7 @@ describe('Appointments', () => {
   });
 
   it('shows one day when it is tapped, and all upcoming again when it is tapped away', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await screen.findByText('Glucose tolerance test');
 
     await fireEvent.press(screen.getByRole('button', dayButton('2026-10-14', true)));
@@ -215,7 +210,7 @@ describe('Appointments', () => {
   });
 
   it('says so when the day she taps has nothing booked', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('button', dayButton('2026-10-15')));
 
     expect(screen.getByText(dayTitle('2026-10-15'))).toBeTruthy();
@@ -223,7 +218,7 @@ describe('Appointments', () => {
   });
 
   it('steps through the months', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await screen.findByText('Glucose tolerance test');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Next month' }));
@@ -240,7 +235,7 @@ describe('Appointments', () => {
   });
 
   it('shows a past day’s appointments when she looks back and taps it', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await screen.findByText('Glucose tolerance test');
     await fireEvent.press(screen.getByRole('button', { name: 'Previous month' }));
     await fireEvent.press(screen.getByRole('button', dayButton('2026-09-20', true)));
@@ -249,7 +244,7 @@ describe('Appointments', () => {
   });
 
   it('books an appointment and goes to its day', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await openSheet();
 
     await fireEvent.changeText(screen.getByLabelText("What's it for?"), '  Dentist  ');
@@ -268,13 +263,11 @@ describe('Appointments', () => {
     expect(screen.getByRole('button', { ...dayButton('2026-12-05', true), selected: true })).toBeTruthy();
     expect(screen.getByText(`${clock('14:30')} · Dr Mehta`)).toBeTruthy();
     expect(screen.queryByText('New appointment')).toBeNull();
-    expect(mockDb().calls).toEqual([
-      { op: 'insert', row: { pregnancy_id: 'p1', title: 'Dentist', appt_date: '2026-12-05', appt_time: '14:30', place: 'Dr Mehta' } },
-    ]);
+    expect(await booked()).toEqual([{ title: 'Dentist', appt_date: '2026-12-05', appt_time: '14:30', place: 'Dr Mehta' }]);
   });
 
   it('keeps what it books in the list when she goes back to all upcoming', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await openSheet();
     await fireEvent.changeText(screen.getByLabelText("What's it for?"), 'Dentist');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
@@ -283,11 +276,11 @@ describe('Appointments', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'All upcoming' }));
     // It was booked for today, with no time, so it leads the list.
     expect(titlesShown()).toEqual(['Dentist', 'Blood test', 'Glucose tolerance test', 'Routine checkup', 'Growth scan']);
-    expect(mockDb().calls[0].row).toEqual({ pregnancy_id: 'p1', title: 'Dentist', appt_date: '2026-10-03', appt_time: null, place: null });
+    expect(await booked()).toEqual([{ title: 'Dentist', appt_date: '2026-10-03', appt_time: null, place: null }]);
   });
 
   it('lets the time be left out, or taken away again', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await openSheet();
     expect(screen.getByRole('button', { name: 'Time: not set' })).toBeTruthy();
 
@@ -299,11 +292,11 @@ describe('Appointments', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
     await screen.findByText('Dentist');
-    expect(mockDb().calls[0].row).toMatchObject({ appt_time: null });
+    expect(await booked()).toEqual([expect.objectContaining({ appt_time: null })]);
   });
 
   it('starts the date on the day that is selected, or on today', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await openSheet();
     expect(screen.getByRole('button', { name: `Date: ${dayLong('2026-10-03')}` })).toBeTruthy();
     await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
@@ -314,7 +307,7 @@ describe('Appointments', () => {
   });
 
   it('opens with empty fields every time', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await openSheet();
     await fireEvent.changeText(screen.getByLabelText("What's it for?"), 'Half typed');
     await fireEvent.press(screen.getByRole('button', { name: /^Time:/ }));
@@ -326,17 +319,17 @@ describe('Appointments', () => {
   });
 
   it('asks what it is for before saving', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await openSheet();
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
     expect(screen.getByText('Enter what the appointment is for.')).toBeTruthy();
-    expect(mockDb().calls).toEqual([]);
+    expect(await booked()).toEqual([]);
   });
 
   it('keeps the sheet open, with what she typed, when saving fails', async () => {
     mockDb().failInsert = true;
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await openSheet();
     await fireEvent.changeText(screen.getByLabelText("What's it for?"), 'Dentist');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
@@ -348,18 +341,18 @@ describe('Appointments', () => {
 
   it('cancels an appointment only after asking', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('button', { name: 'Remove Routine checkup' }));
 
     expect(alert).toHaveBeenCalledTimes(1);
     const [title, message, buttons] = alert.mock.calls[0];
     expect(title).toBe('Remove Routine checkup?');
     expect(message).toBe('It disappears for both of you.');
-    expect(mockDb().calls).toEqual([]);
+    expect(await cancelled()).toEqual([]);
 
     await buttons?.find((b) => b.style === 'destructive')?.onPress?.();
     await waitFor(() => expect(screen.queryByText('Routine checkup')).toBeNull());
-    expect(mockDb().calls).toEqual([{ op: 'delete', filters: { id: 'a3' } }]);
+    expect(await cancelled()).toEqual(['a3']);
     // The day it was on is no longer marked.
     expect(screen.getByRole('button', dayButton('2026-10-28'))).toBeTruthy();
     alert.mockRestore();
@@ -368,7 +361,7 @@ describe('Appointments', () => {
   it('puts an appointment back and says so when it could not be cancelled', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     mockDb().failDelete = true;
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('button', { name: 'Remove Routine checkup' }));
     await alert.mock.calls[0][2]?.find((b) => b.style === 'destructive')?.onPress?.();
 
@@ -379,7 +372,7 @@ describe('Appointments', () => {
 
   it('invites her to book the first one when there is nothing yet', async () => {
     mockDb().appointments = [];
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
 
     expect(await screen.findByText('Nothing booked.')).toBeTruthy();
     await fireEvent.press(screen.getByRole('button', { name: '+ Add appointment' }));
@@ -388,21 +381,21 @@ describe('Appointments', () => {
 
   it('says so when the appointments cannot be loaded', async () => {
     mockDb().failLoad = true;
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
 
     expect(await screen.findByText("Couldn't load your appointments. Check your connection and try again.")).toBeTruthy();
     expect(screen.queryByText('Nothing booked.')).toBeNull();
   });
 
   it('goes back to Today', async () => {
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('button', { name: 'Back to Today' }));
     expect(router.back).toHaveBeenCalledTimes(1);
   });
 
   it('goes to Today even when there is nothing to go back to', async () => {
     (router.canGoBack as jest.Mock).mockReturnValueOnce(false);
-    await render(<AppointmentsScreen />, { wrapper });
+    await show();
     await fireEvent.press(await screen.findByRole('button', { name: 'Back to Today' }));
     expect(router.replace).toHaveBeenCalledWith('/');
   });

@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { localTime, toAppointment, type Appointment, type AppointmentRow } from '@/lib/appointments';
 import { REMINDERS, toPregnancyInsert, type Answers, type ReminderKind } from '@/lib/onboarding';
-import { localToday } from '@/lib/pregnancy';
+import { dueDateFromLmp, localToday } from '@/lib/pregnancy';
 import type { PregnancyRow } from '@/lib/profile';
 import { CHECKINS, startOfLocalDay, type CheckinType, type Reading } from '@/lib/readings';
 import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
+import { listItems, newId, readyStore, removeItems, saveItem, stableId, useVaultQuery, vaultQueryKey, type VaultItem } from '@/lib/vault/records';
+import { useVault } from '@/lib/vault/VaultProvider';
 import type { Dose, Medication, MedicationRow } from '@/lib/vitamins';
 
 export type Pregnancy = PregnancyRow;
@@ -18,25 +20,63 @@ export type Membership = { role: 'owner' | 'partner'; pregnancy: Pregnancy };
 
 export type Profile = { id: string; name: string | null; avatar_url: string | null };
 
+/** Health data (everything under `vaultQueryKey`) is read from this phone's encrypted store. */
 export const keys = {
   membership: (userId: string) => ['membership', userId] as const,
   profile: (userId: string) => ['profile', userId] as const,
-  readings: (pregnancyId: string) => ['readings', pregnancyId] as const,
-  today: (pregnancyId: string, day: string) => ['readings', pregnancyId, 'today', day] as const,
-  latest: (pregnancyId: string) => ['readings', pregnancyId, 'latest'] as const,
+  pregnancy: (pregnancyId: string) => vaultQueryKey(pregnancyId, 'pregnancy'),
+  readings: (pregnancyId: string) => vaultQueryKey(pregnancyId, 'readings'),
+  today: (pregnancyId: string, day: string) => vaultQueryKey(pregnancyId, 'readings', 'today', day),
+  latest: (pregnancyId: string) => vaultQueryKey(pregnancyId, 'readings', 'latest'),
   members: (pregnancyId: string) => ['members', pregnancyId] as const,
   invite: (pregnancyId: string) => ['invite', pregnancyId] as const,
   reminders: (pregnancyId: string, userId: string) => ['reminders', pregnancyId, userId] as const,
-  meds: (pregnancyId: string) => ['meds', pregnancyId] as const,
-  doses: (pregnancyId: string) => ['doses', pregnancyId] as const,
-  appointments: (pregnancyId: string) => ['appointments', pregnancyId] as const,
+  meds: (pregnancyId: string) => vaultQueryKey(pregnancyId, 'meds'),
+  doses: (pregnancyId: string) => vaultQueryKey(pregnancyId, 'doses'),
+  appointments: (pregnancyId: string) => vaultQueryKey(pregnancyId, 'appointments'),
 };
 
-/** The pregnancy the signed-in user belongs to, or null if they haven't set one up or joined one. */
+/** The pregnancy's details live in one vault record of this kind. */
+export const PREGNANCY_KIND = 'pregnancy';
+export const pregnancyDetailsId = (pregnancyId: string) => stableId('pregnancy', pregnancyId);
+
+/** Columns of `pregnancies` that are health details, so belong in the vault. */
+export const PREGNANCY_DETAILS = [
+  'lmp_date',
+  'due_date',
+  'method',
+  'ivf_transfer_date',
+  'ivf_embryo_day',
+  'babies',
+  'first_pregnancy',
+  'sex',
+  'nickname',
+  'height_cm',
+  'pre_weight_kg',
+  'blood_group',
+  'conditions',
+  'allergies',
+  'doctor',
+  'hospital',
+  'hospital_phone',
+  'emergency_contact',
+  'emergency_phone',
+  'units',
+] as const;
+
+export function pregnancyDetails(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(PREGNANCY_DETAILS.filter((k) => k in row).map((k) => [k, row[k]]));
+}
+
+/**
+ * The pregnancy the signed-in user belongs to, or null if they haven't set one
+ * up or joined one. Once this phone has the household key, the details kept in
+ * the vault are laid over the server's row.
+ */
 export function useMembership() {
   const { session } = useSession();
   const userId = session?.user.id;
-  return useQuery({
+  const server = useQuery({
     queryKey: keys.membership(userId ?? 'signed-out'),
     enabled: !!userId,
     queryFn: async (): Promise<Membership | null> => {
@@ -50,6 +90,15 @@ export function useMembership() {
       return (data as unknown as Membership | null) ?? null;
     },
   });
+  const details = useVaultQuery(server.data?.pregnancy.id, ['pregnancy'], async (store, pid) => {
+    const record = await store.get(pregnancyDetailsId(pid));
+    return record && !record.deleted ? (record.data as Partial<Pregnancy>) : null;
+  });
+  const data = useMemo(
+    () => (server.data && details.data ? { ...server.data, pregnancy: { ...server.data.pregnancy, ...details.data } } : server.data),
+    [server.data, details.data],
+  );
+  return data === server.data ? server : { ...server, data };
 }
 
 export function useProfile() {
@@ -190,172 +239,126 @@ export function useLocalTime(): string {
   return time;
 }
 
-const READING_COLUMNS = 'id, pregnancy_id, type, value_num, value_num2, value_text, taken_at, logged_by';
+/** A reading as it is kept in the vault: everything but the id and pregnancy. */
+type ReadingData = Omit<Reading, 'id' | 'pregnancy_id'>;
+type Tally = 'kicks' | 'water';
+const TALLIES: Tally[] = ['kicks', 'water'];
+
+/** Weight, BP, sugar and sleep each have their own kind, so "latest" reads only its own type. */
+export const readingKind = (type: CheckinType) => `reading.${type}`;
+/** Kicks and water are kept per local day, so today's count never reads the whole pregnancy. */
+export const tallyKind = (type: Tally, day: string) => `tally.${type}.${day}`;
+
+const toReading = (pregnancyId: string) => (item: VaultItem<ReadingData>): Reading => ({
+  id: item.id,
+  pregnancy_id: pregnancyId,
+  ...item.data,
+});
+const byTakenAt = (a: Reading, b: Reading) => Date.parse(a.taken_at) - Date.parse(b.taken_at);
 
 /** Everything logged since local midnight (kicks and water are counted from this). */
 export function useTodayReadings(pregnancyId: string | undefined, day: string) {
-  return useQuery({
-    queryKey: keys.today(pregnancyId ?? 'none', day),
-    enabled: !!pregnancyId,
-    queryFn: async (): Promise<Reading[]> => {
-      const { data, error } = await supabase
-        .from('readings')
-        .select(READING_COLUMNS)
-        .eq('pregnancy_id', pregnancyId!)
-        .gte('taken_at', startOfLocalDay(dayStart(day)))
-        .order('taken_at', { ascending: true });
-      if (error) throw error;
-      return data as Reading[];
-    },
+  return useVaultQuery(pregnancyId, ['readings', 'today', day], async (store, pid): Promise<Reading[]> => {
+    const since = Date.parse(startOfLocalDay(dayStart(day)));
+    const lists = await Promise.all([
+      ...CHECKINS.map((type) => listItems<ReadingData>(store, pid, readingKind(type))),
+      ...TALLIES.map((type) => listItems<ReadingData>(store, pid, tallyKind(type, day))),
+    ]);
+    return lists
+      .flat()
+      .map(toReading(pid))
+      .filter((r) => Date.parse(r.taken_at) >= since)
+      .sort(byTakenAt);
   });
 }
 
 /** The newest weight, BP, sugar and sleep reading, whenever they were logged. */
 export function useLatestCheckins(pregnancyId: string | undefined) {
-  return useQuery({
-    queryKey: keys.latest(pregnancyId ?? 'none'),
-    enabled: !!pregnancyId,
-    queryFn: async (): Promise<Partial<Record<CheckinType, Reading>>> => {
-      const rows = await Promise.all(
-        CHECKINS.map(async (type) => {
-          const { data, error } = await supabase
-            .from('readings')
-            .select(READING_COLUMNS)
-            .eq('pregnancy_id', pregnancyId!)
-            .eq('type', type)
-            .order('taken_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (error) throw error;
-          return [type, data] as const;
-        }),
-      );
-      return Object.fromEntries(rows.filter(([, r]) => r)) as Partial<Record<CheckinType, Reading>>;
-    },
+  return useVaultQuery(pregnancyId, ['readings', 'latest'], async (store, pid) => {
+    const latest: Partial<Record<CheckinType, Reading>> = {};
+    for (const type of CHECKINS) {
+      const rows = (await listItems<ReadingData>(store, pid, readingKind(type))).map(toReading(pid)).sort(byTakenAt);
+      if (rows.length) latest[type] = rows[rows.length - 1];
+    }
+    return latest;
   });
 }
 
 export function useLogCheckin(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
+  const vault = useVault();
+  const { session } = useSession();
   return useMutation({
     mutationFn: async (input: { type: CheckinType; value_num: number; value_num2: number | null; value_text?: string | null }) => {
-      const { error } = await supabase.from('readings').insert({
-        pregnancy_id: pregnancyId!,
+      const data: ReadingData = {
         type: input.type,
         value_num: input.value_num,
         value_num2: input.value_num2,
         value_text: input.value_text ?? null,
-      });
-      if (error) throw error;
+        taken_at: new Date().toISOString(),
+        logged_by: session?.user.id ?? '',
+      };
+      await saveItem(vault, { id: newId(), pregnancyId: pregnancyId!, kind: readingKind(input.type), data });
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: keys.readings(pregnancyId ?? 'none') }),
   });
 }
 
 /**
- * Kicks and glasses of water: one row per tap, so taps from both phones never
- * overwrite each other. Removing takes away today's newest row of that type.
- * Today's list updates straight away and is put right if the write fails.
+ * Kicks and glasses of water: one record per tap, so taps from both phones
+ * never overwrite each other. Removing takes away the tap with that id
+ * (Today passes the newest one).
  */
-export function useTally(pregnancyId: string | undefined, type: 'kicks' | 'water', day: string) {
+export function useTally(pregnancyId: string | undefined, type: Tally, day: string) {
   const queryClient = useQueryClient();
+  const vault = useVault();
   const { session } = useSession();
-  const todayKey = keys.today(pregnancyId ?? 'none', day);
-
-  const optimistic = async (change: (rows: Reading[]) => Reading[]) => {
-    await queryClient.cancelQueries({ queryKey: todayKey });
-    const previous = queryClient.getQueryData<Reading[]>(todayKey);
-    queryClient.setQueryData<Reading[]>(todayKey, (rows) => change(rows ?? []));
-    return { previous };
-  };
-  const rollback = (_e: unknown, _v: unknown, ctx: { previous?: Reading[] } | undefined) =>
-    queryClient.setQueryData(todayKey, ctx?.previous);
   const settle = () => queryClient.invalidateQueries({ queryKey: keys.readings(pregnancyId ?? 'none') });
 
   const add = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('readings').insert({ pregnancy_id: pregnancyId!, type, value_num: 1 });
-      if (error) throw error;
+      const data: ReadingData = {
+        type,
+        value_num: 1,
+        value_num2: null,
+        value_text: null,
+        taken_at: new Date().toISOString(),
+        logged_by: session?.user.id ?? '',
+      };
+      await saveItem(vault, { id: newId(), pregnancyId: pregnancyId!, kind: tallyKind(type, day), data });
     },
-    onMutate: () =>
-      optimistic((rows) => [
-        ...rows,
-        {
-          id: `pending-${Date.now()}`,
-          pregnancy_id: pregnancyId!,
-          type,
-          value_num: 1,
-          value_num2: null,
-          value_text: null,
-          taken_at: new Date().toISOString(),
-          logged_by: session?.user.id ?? '',
-        },
-      ]),
-    onError: rollback,
     onSettled: settle,
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('readings').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onMutate: (id: string) => optimistic((rows) => rows.filter((r) => r.id !== id)),
-    onError: rollback,
+    mutationFn: (id: string) => removeItems(vault, [id]),
     onSettled: settle,
   });
 
   return { add, remove };
 }
 
-/**
- * Live sync: when either phone logs, ticks, adds, edits or removes something,
- * refetch it. One channel covers everything, so call this once, from the tabs
- * layout, rather than from each screen (a second subscription to the same
- * channel name would throw).
- *
- * Inserts and updates are filtered to this pregnancy. Deletes can't be (only
- * the id is sent), so any delete triggers a refetch; RLS still decides what
- * the refetch returns.
- */
-export function useRealtimeSync(pregnancyId: string | undefined) {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!pregnancyId) return;
-    const filter = `pregnancy_id=eq.${pregnancyId}`;
-    const tables = [
-      ['readings', keys.readings(pregnancyId)],
-      ['medications', keys.meds(pregnancyId)],
-      ['med_doses', keys.doses(pregnancyId)],
-      ['appointments', keys.appointments(pregnancyId)],
-    ] as const;
-    const channel = supabase.channel(`pregnancy:${pregnancyId}`);
-    for (const [table, key] of tables) {
-      const refresh = () => queryClient.invalidateQueries({ queryKey: key });
-      channel
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, refresh)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter }, refresh)
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, refresh);
-    }
-    channel.subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [pregnancyId, queryClient]);
-}
-
 // ---------------------------------------------------------------------------
 // Profile: pregnancy details, name, reminders, partner
 // ---------------------------------------------------------------------------
 
+/**
+ * Saves edits to the pregnancy details. They go into the vault, never to the
+ * readable `pregnancies` row; the whole set is kept as one record.
+ */
 export function useUpdatePregnancy(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
+  const vault = useVault();
+  const membership = useMembership();
   return useMutation({
     mutationFn: async (patch: Record<string, unknown>) => {
-      const { error } = await supabase.from('pregnancies').update(patch).eq('id', pregnancyId!);
-      if (error) throw error;
+      const current = membership.data?.pregnancy;
+      if (!current || current.id !== pregnancyId) throw new Error('The pregnancy hasn’t loaded yet.');
+      const next = { ...pregnancyDetails(current as unknown as Record<string, unknown>), ...patch };
+      if (typeof patch.lmp_date === 'string') next.due_date = dueDateFromLmp(patch.lmp_date);
+      await saveItem(vault, { id: pregnancyDetailsId(pregnancyId!), pregnancyId: pregnancyId!, kind: PREGNANCY_KIND, data: next });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['membership'] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.pregnancy(pregnancyId ?? 'none') }),
   });
 }
 
@@ -491,8 +494,8 @@ export function useSetReminder(pregnancyId: string | undefined) {
 // Vitamins: medications and the days they were taken
 // ---------------------------------------------------------------------------
 
-const MED_COLUMNS = 'id, pregnancy_id, name, dose, time_of_day, start_date, end_date, created_at';
-const DOSE_COLUMNS = 'medication_id, pregnancy_id, day, taken_at, logged_by';
+type MedicationData = Omit<Medication, 'id' | 'pregnancy_id'>;
+type DoseData = Omit<Dose, 'pregnancy_id'>;
 
 /**
  * How many recent doses to load. The streak walks back through them, so a
@@ -501,128 +504,72 @@ const DOSE_COLUMNS = 'medication_id, pregnancy_id, day, taken_at, logged_by';
  */
 const DOSE_LIMIT = 1000;
 
+/** One dose record per medicine per day, the same on both phones, so ticking it twice leaves one. */
+export const doseId = (medicationId: string, day: string) => stableId('dose', medicationId, day);
+
 export function useMedications(pregnancyId: string | undefined) {
-  return useQuery({
-    queryKey: keys.meds(pregnancyId ?? 'none'),
-    enabled: !!pregnancyId,
-    queryFn: async (): Promise<Medication[]> => {
-      const { data, error } = await supabase
-        .from('medications')
-        .select(MED_COLUMNS)
-        .eq('pregnancy_id', pregnancyId!)
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Medication[];
-    },
-  });
+  return useVaultQuery(pregnancyId, ['meds'], async (store, pid): Promise<Medication[]> =>
+    (await listItems<MedicationData>(store, pid, 'medication'))
+      .map((item) => ({ id: item.id, pregnancy_id: pid, ...item.data }))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)),
+  );
 }
 
 export function useDoses(pregnancyId: string | undefined) {
-  return useQuery({
-    queryKey: keys.doses(pregnancyId ?? 'none'),
-    enabled: !!pregnancyId,
-    queryFn: async (): Promise<Dose[]> => {
-      const { data, error } = await supabase
-        .from('med_doses')
-        .select(DOSE_COLUMNS)
-        .eq('pregnancy_id', pregnancyId!)
-        .order('day', { ascending: false })
-        .limit(DOSE_LIMIT);
-      if (error) throw error;
-      return (data ?? []) as Dose[];
-    },
-  });
+  return useVaultQuery(pregnancyId, ['doses'], async (store, pid): Promise<Dose[]> =>
+    (await listItems<DoseData>(store, pid, 'dose'))
+      .map((item) => ({ pregnancy_id: pid, ...item.data }))
+      .sort((a, b) => b.day.localeCompare(a.day))
+      .slice(0, DOSE_LIMIT),
+  );
 }
 
 export function useAddMedication(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
+  const vault = useVault();
   return useMutation({
     mutationFn: async (row: MedicationRow) => {
-      const { error } = await supabase.from('medications').insert({ pregnancy_id: pregnancyId!, ...row });
-      if (error) throw error;
+      const data: MedicationData = { end_date: null, ...row, created_at: new Date().toISOString() };
+      await saveItem(vault, { id: newId(), pregnancyId: pregnancyId!, kind: 'medication', data });
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: keys.meds(pregnancyId ?? 'none') }),
   });
 }
 
-/** Deletes a medicine and, with it, its history. The list updates straight away. */
+/** Deletes a medicine and, with it, its history. */
 export function useRemoveMedication(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
-  const medsKey = keys.meds(pregnancyId ?? 'none');
-  const dosesKey = keys.doses(pregnancyId ?? 'none');
+  const vault = useVault();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('medications').delete().eq('id', id);
-      if (error) throw error;
+      const doses = await listItems<DoseData>(readyStore(vault), pregnancyId!, 'dose');
+      await removeItems(vault, [id, ...doses.filter((d) => d.data.medication_id === id).map((d) => d.id)]);
     },
-    onMutate: async (id: string) => {
-      await Promise.all([queryClient.cancelQueries({ queryKey: medsKey }), queryClient.cancelQueries({ queryKey: dosesKey })]);
-      const meds = queryClient.getQueryData<Medication[]>(medsKey);
-      const doses = queryClient.getQueryData<Dose[]>(dosesKey);
-      queryClient.setQueryData<Medication[]>(medsKey, (rows) => rows?.filter((m) => m.id !== id));
-      queryClient.setQueryData<Dose[]>(dosesKey, (rows) => rows?.filter((d) => d.medication_id !== id));
-      return { meds, doses };
-    },
-    onError: (_e, _id, ctx) => {
-      queryClient.setQueryData(medsKey, ctx?.meds);
-      queryClient.setQueryData(dosesKey, ctx?.doses);
-    },
-    onSettled: () => Promise.all([queryClient.invalidateQueries({ queryKey: medsKey }), queryClient.invalidateQueries({ queryKey: dosesKey })]),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.meds(pregnancyId ?? 'none') }),
+        queryClient.invalidateQueries({ queryKey: keys.doses(pregnancyId ?? 'none') }),
+      ]),
   });
 }
 
 /**
- * Ticks a dose off for a day, or un-ticks it. The list updates straight away
- * and is put right if the write fails. Toggles run one after another, so
- * tapping the same medicine twice quickly can't have its insert and delete
- * land in the wrong order.
+ * Ticks a dose off for a day, or un-ticks it. Toggles run one after another,
+ * so tapping the same medicine twice quickly can't land in the wrong order.
  */
 export function useToggleDose(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
+  const vault = useVault();
   const { session } = useSession();
-  const key = keys.doses(pregnancyId ?? 'none');
-  const mutationKey = ['dose', pregnancyId ?? 'none'];
   return useMutation({
-    mutationKey,
     scope: { id: `doses:${pregnancyId ?? 'none'}` },
     mutationFn: async ({ medicationId, day, taken }: { medicationId: string; day: string; taken: boolean }) => {
-      if (taken) {
-        // "Ignore duplicates" so two phones ticking at once leave one row.
-        const { error } = await supabase
-          .from('med_doses')
-          .upsert({ pregnancy_id: pregnancyId!, medication_id: medicationId, day }, { onConflict: 'medication_id,day', ignoreDuplicates: true });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('med_doses').delete().eq('medication_id', medicationId).eq('day', day);
-        if (error) throw error;
-      }
+      const id = doseId(medicationId, day);
+      if (!taken) return removeItems(vault, [id]);
+      const data: DoseData = { medication_id: medicationId, day, taken_at: new Date().toISOString(), logged_by: session?.user.id ?? null };
+      await saveItem(vault, { id, pregnancyId: pregnancyId!, kind: 'dose', data });
     },
-    onMutate: async ({ medicationId, day, taken }) => {
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<Dose[]>(key);
-      const without = (rows: Dose[]) => rows.filter((d) => !(d.medication_id === medicationId && d.day === day));
-      queryClient.setQueryData<Dose[]>(key, (rows = []) =>
-        taken
-          ? [
-              {
-                medication_id: medicationId,
-                pregnancy_id: pregnancyId!,
-                day,
-                taken_at: new Date().toISOString(),
-                logged_by: session?.user.id ?? null,
-              },
-              ...without(rows),
-            ]
-          : without(rows),
-      );
-      return { previous };
-    },
-    onError: (_e, _v, ctx) => queryClient.setQueryData(key, ctx?.previous),
-    onSettled: () => {
-      // While more toggles are queued, wait: refetching now would show the
-      // server's state without them and the ticks would flicker back.
-      if (queryClient.isMutating({ mutationKey }) <= 1) queryClient.invalidateQueries({ queryKey: key });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.doses(pregnancyId ?? 'none') }),
   });
 }
 
@@ -630,63 +577,36 @@ export function useToggleDose(pregnancyId: string | undefined) {
 // Appointments
 // ---------------------------------------------------------------------------
 
-const APPOINTMENT_COLUMNS = 'id, pregnancy_id, title, appt_date, appt_time, place';
+type AppointmentData = AppointmentRow;
 
 export function useAppointments(pregnancyId: string | undefined) {
-  return useQuery({
-    queryKey: keys.appointments(pregnancyId ?? 'none'),
-    enabled: !!pregnancyId,
-    queryFn: async (): Promise<Appointment[]> => {
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(APPOINTMENT_COLUMNS)
-        .eq('pregnancy_id', pregnancyId!)
-        .order('appt_date', { ascending: true });
-      if (error) throw error;
-      return (data ?? []).map((row) => toAppointment(row as Appointment));
-    },
-  });
+  return useVaultQuery(pregnancyId, ['appointments'], async (store, pid): Promise<Appointment[]> =>
+    (await listItems<AppointmentData>(store, pid, 'appointment'))
+      .map((item) => toAppointment({ id: item.id, pregnancy_id: pid, ...item.data }))
+      .sort((a, b) => a.appt_date.localeCompare(b.appt_date)),
+  );
 }
 
-/**
- * Books an appointment. The saved row goes straight into the list, so the day
- * she just booked doesn't show "Nothing booked" while the refetch is on its way.
- */
+/** Books an appointment for both of them. */
 export function useAddAppointment(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
-  const key = keys.appointments(pregnancyId ?? 'none');
+  const vault = useVault();
   return useMutation({
-    mutationFn: async (row: AppointmentRow) => {
-      const { data, error } = await supabase
-        .from('appointments')
-        .insert({ pregnancy_id: pregnancyId!, ...row })
-        .select(APPOINTMENT_COLUMNS)
-        .single();
-      if (error) throw error;
-      return toAppointment(data as Appointment);
+    mutationFn: async (row: AppointmentRow): Promise<Appointment> => {
+      const id = newId();
+      await saveItem(vault, { id, pregnancyId: pregnancyId!, kind: 'appointment', data: row });
+      return toAppointment({ id, pregnancy_id: pregnancyId!, ...row });
     },
-    onSuccess: (created) =>
-      queryClient.setQueryData<Appointment[]>(key, (rows) => rows && [...rows.filter((a) => a.id !== created.id), created]),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.appointments(pregnancyId ?? 'none') }),
   });
 }
 
-/** Cancels an appointment for both of them. The list updates straight away and is put right if the write fails. */
+/** Cancels an appointment for both of them. */
 export function useRemoveAppointment(pregnancyId: string | undefined) {
   const queryClient = useQueryClient();
-  const key = keys.appointments(pregnancyId ?? 'none');
+  const vault = useVault();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('appointments').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onMutate: async (id: string) => {
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<Appointment[]>(key);
-      queryClient.setQueryData<Appointment[]>(key, (rows) => rows?.filter((a) => a.id !== id));
-      return { previous };
-    },
-    onError: (_e, _id, ctx) => queryClient.setQueryData(key, ctx?.previous),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+    mutationFn: (id: string) => removeItems(vault, [id]),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.appointments(pregnancyId ?? 'none') }),
   });
 }

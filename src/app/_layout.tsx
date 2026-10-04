@@ -15,6 +15,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Button, Text } from '@/components';
+import { useCopyOldData } from '@/lib/copyOldData';
 import { useMembership } from '@/lib/data';
 import { queryClient } from '@/lib/queryClient';
 import { SessionProvider, useSession } from '@/lib/session';
@@ -55,7 +56,6 @@ export default function RootLayout() {
 function RootNavigator() {
   const { session, loading } = useSession();
   const membership = useMembership();
-  useReminders();
   const signedIn = !!session;
   const ready = !loading && (!signedIn || !membership.isPending);
 
@@ -79,6 +79,7 @@ function RootNavigator() {
 
   return (
     <VaultProvider pregnancyId={membership.data?.pregnancy.id} role={membership.data?.role}>
+      <Background />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.ground } }}>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="(auth)" />
@@ -97,6 +98,13 @@ function RootNavigator() {
       </Stack>
     </VaultProvider>
   );
+}
+
+/** Work that reads health data, so runs inside the vault: reminders, and the one-time copy of old data. */
+function Background() {
+  useReminders();
+  useCopyOldData();
+  return null;
 }
 
 const styles = StyleSheet.create({

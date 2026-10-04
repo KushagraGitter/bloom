@@ -15,6 +15,7 @@ import {
   TextField,
   WhenFields,
 } from '@/components';
+import { VaultNotice } from '@/components/VaultNotice';
 import {
   PLACE_MAX,
   TITLE_MAX,
@@ -78,6 +79,8 @@ export default function AppointmentsScreen() {
           <PlusIcon />
         </Pressable>
       </View>
+
+      <VaultNotice />
 
       <Card size="panel" elevation="lg" style={styles.calendar}>
         <View style={styles.monthBar}>

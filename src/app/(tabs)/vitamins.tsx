@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BottomSheet, Button, Card, Chip, PillIcon, PlusIcon, Screen, Text, TextField, TrashIcon } from '@/components';
+import { VaultNotice } from '@/components/VaultNotice';
 import { confirmRemove } from '@/lib/confirm';
 import {
   useAddMedication,
@@ -82,6 +83,8 @@ export default function VitaminsScreen() {
           <PlusIcon />
         </Pressable>
       </View>
+
+      <VaultNotice />
 
       {(meds.isError || doses.isError) && (
         <Text muted accessibilityRole="alert">

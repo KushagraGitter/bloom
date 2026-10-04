@@ -3,10 +3,13 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
 
+import { keys } from '@/lib/data';
 import { askForPermission, clearScheduled, permissionState, replaceScheduled } from '@/lib/notifications';
 import { addDays } from '@/lib/pregnancy';
 import type { PlannedReminder } from '@/lib/reminders';
 import { useNotificationPermission, useReminders } from '@/lib/useReminders';
+import type { LocalRecord, LocalStore } from '@/lib/vault/localStore';
+import { VaultContext, type Vault } from '@/lib/vault/VaultProvider';
 
 jest.mock('@/lib/notifications', () => ({
   permissionState: jest.fn(),
@@ -43,6 +46,38 @@ jest.mock('@/lib/supabase', () => {
   };
   return { isSupabaseConfigured: true, supabase: { from } };
 });
+
+// Medicines, doses and appointments are read from the vault. This one reads
+// them from `mockDb.rows` each time, in the shape of the old tables, so a test
+// can change them and refetch, or hold them back with `mockDb.hang`.
+const TABLE_OF: Record<string, string> = { medication: 'medications', dose: 'med_doses', appointment: 'appointments' };
+const fakeStore = {
+  list: (_pregnancyId: string, kind: string) =>
+    new Promise<LocalRecord[]>((resolve) => {
+      const table = TABLE_OF[kind];
+      const records = (mockDb.rows[table] ?? []).map(({ id, pregnancy_id, ...data }): LocalRecord => ({
+        id: String(id ?? `${data.medication_id}:${data.day}`),
+        pregnancyId: String(pregnancy_id),
+        kind,
+        data,
+        updatedAt: '2026-10-01T00:00:00.000Z',
+        deleted: false,
+        dirty: false,
+      }));
+      if (mockDb.hang.includes(table)) mockDb.held.push(() => resolve(records));
+      else resolve(records);
+    }),
+  get: async () => null,
+} as unknown as LocalStore;
+const vault: Vault = {
+  state: 'ready',
+  role: 'owner',
+  householdKey: null,
+  store: fakeStore,
+  sync: null,
+  adoptKey: async () => true,
+  retry: () => {},
+};
 
 // Saturday 3 October 2026, ten in the morning, thirty weeks along.
 const TODAY = '2026-10-03';
@@ -144,7 +179,11 @@ function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { gcTime: Infinity } },
   });
-  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <VaultContext.Provider value={vault}>{children}</VaultContext.Provider>
+    </QueryClientProvider>
+  );
   return renderHook(() => useReminders(), { wrapper }).then((view) => ({ client, ...view }));
 }
 
@@ -157,7 +196,7 @@ const refetch = (client: QueryClient) =>
 /** Waits for every query the hook depends on to have an answer. */
 const loaded = (client: QueryClient) =>
   waitFor(() => {
-    for (const key of [['membership', 'me'], ['reminders', 'p1', 'me'], ['meds', 'p1'], ['doses', 'p1'], ['appointments', 'p1']]) {
+    for (const key of [keys.membership('me'), keys.reminders('p1', 'me'), keys.meds('p1'), keys.doses('p1'), keys.appointments('p1')]) {
       expect(client.getQueryData(key)).toBeDefined();
     }
   });
@@ -179,7 +218,7 @@ describe('useReminders', () => {
     it('leaves the phone alone while any of it is still on its way', async () => {
       mockDb.hang = ['appointments'];
       const { client } = await setup();
-      await waitFor(() => expect(client.getQueryData(['doses', 'p1'])).toBeDefined());
+      await waitFor(() => expect(client.getQueryData(keys.doses('p1'))).toBeDefined());
       await waitFor(() => expect(client.getQueryData(['reminders', 'p1', 'me'])).toBeDefined());
       await settle();
       expect(replaceScheduled).not.toHaveBeenCalled();
@@ -256,7 +295,7 @@ describe('useReminders', () => {
       jest.mocked(permissionState).mockResolvedValue('undetermined');
       mockDb.hang = ['reminder_prefs'];
       const { client } = await setup();
-      await waitFor(() => expect(client.getQueryData(['meds', 'p1'])).toBeDefined());
+      await waitFor(() => expect(client.getQueryData(keys.meds('p1'))).toBeDefined());
       await settle();
       expect(askForPermission).not.toHaveBeenCalled();
 
