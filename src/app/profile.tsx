@@ -18,6 +18,7 @@ import {
   useSetReminder,
   useUpdateName,
   useUpdatePregnancy,
+  type Pregnancy,
 } from '@/lib/data';
 import { openSystemSettings, sendTestReminder } from '@/lib/notifications';
 import { REMINDERS, toggleCondition } from '@/lib/onboarding';
@@ -36,6 +37,7 @@ import {
   type FieldKey,
 } from '@/lib/profile';
 import { useSession } from '@/lib/session';
+import { NoShareSheetError, useExportData, type ExportFormat } from '@/lib/useExport';
 import { useNotificationPermission } from '@/lib/useReminders';
 import { useVault, type VaultState } from '@/lib/vault/VaultProvider';
 import { border, colors, fonts, radius } from '@/theme/tokens';
@@ -137,6 +139,8 @@ export default function ProfileScreen() {
       <Reminders pregnancyId={pregnancy.id} />
 
       <UnitsSetting pregnancyId={pregnancy.id} units={pregnancy.units} canEdit={isOwner} />
+
+      <YourData pregnancy={pregnancy} name={name} />
 
       <Button label="Sign out" onPress={() => signOut().catch(() => {})} style={styles.signOut} />
       {__DEV__ && <Button label="Component gallery" onPress={() => router.push('/dev/components')} />}
@@ -313,6 +317,38 @@ function AppLockRow() {
       </View>
       <Toggle label="App lock" value={!!enabled} disabled={enabled === null || busy} onValueChange={change} />
     </View>
+  );
+}
+
+/** "Download my data": made on this phone, handed to the share sheet. */
+function YourData({ pregnancy, name }: { pregnancy: Pregnancy; name: string }) {
+  const exporting = useExportData(pregnancy, name);
+  const [format, setFormat] = useState<ExportFormat | null>(null);
+
+  const run = (f: ExportFormat) => {
+    setFormat(f);
+    exporting.mutate(f);
+  };
+  const busy = exporting.isPending;
+  const label = (f: ExportFormat, idle: string) => (busy && format === f ? 'Getting it ready…' : idle);
+
+  return (
+    <Group title="YOUR DATA">
+      <View style={styles.notice}>
+        <Text variant="caption">
+          A copy made on this phone from what you&apos;ve recorded. Nothing is sent anywhere unless you choose to share it.
+        </Text>
+        <Button label={label('pdf', 'Download PDF summary')} variant="dark" disabled={busy} onPress={() => run('pdf')} />
+        <Button label={label('json', 'Download all data (JSON)')} disabled={busy} onPress={() => run('json')} />
+        {exporting.isError && (
+          <Text style={styles.error} accessibilityRole="alert">
+            {exporting.error instanceof NoShareSheetError
+              ? 'This phone can’t share files from Bloom.'
+              : 'Couldn’t make the file. Try again.'}
+          </Text>
+        )}
+      </View>
+    </Group>
   );
 }
 

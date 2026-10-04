@@ -88,6 +88,14 @@ function createLocalStore(db: SqlDatabase) {
       return rows.map(toRecord);
     },
 
+    /** Every live record of a pregnancy, for a copy of all of it. */
+    async listAll(pregnancyId: string): Promise<LocalRecord[]> {
+      const rows = await db.getAllAsync<Row>('select * from records where pregnancy_id = ? and deleted = 0 order by kind, updated_at, id', [
+        pregnancyId,
+      ]);
+      return rows.map(toRecord);
+    },
+
     async dirty(pregnancyId: string): Promise<LocalRecord[]> {
       const rows = await db.getAllAsync<Row>('select * from records where pregnancy_id = ? and dirty = 1 order by updated_at', [
         pregnancyId,

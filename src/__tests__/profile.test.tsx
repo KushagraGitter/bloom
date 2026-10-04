@@ -19,6 +19,23 @@ jest.mock('@/lib/notifications', () => ({
   openSystemSettings: jest.fn(),
 }));
 
+jest.mock('expo-print', () => ({ printToFileAsync: jest.fn(async () => ({ uri: 'file:///cache/summary.pdf' })) }));
+jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(async () => true), shareAsync: jest.fn(async () => {}) }));
+jest.mock('expo-file-system', () => {
+  const written: Record<string, string> = {};
+  class File {
+    uri: string;
+    constructor(dir: string, name: string) {
+      this.uri = `${dir}/${name}`;
+    }
+    create() {}
+    write(content: string) {
+      written[this.uri] = content;
+    }
+  }
+  return { File, Paths: { cache: 'file:///cache' }, __written: written };
+});
+
 jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)) }));
 
 jest.mock('@/lib/session', () => ({
@@ -233,5 +250,47 @@ describe('Profile reminders and the phone’s permission', () => {
     await loaded();
     await fireEvent.press(await screen.findByRole('button', { name: 'Send a test reminder' }));
     expect(await screen.findByText('Couldn’t send it')).toBeTruthy();
+  });
+});
+
+describe('Profile download my data', () => {
+  const Print = jest.requireMock<{ printToFileAsync: jest.Mock }>('expo-print');
+  const Sharing = jest.requireMock<{ isAvailableAsync: jest.Mock; shareAsync: jest.Mock }>('expo-sharing');
+  const written = jest.requireMock<{ __written: Record<string, string> }>('expo-file-system').__written;
+
+  beforeEach(() => {
+    Print.printToFileAsync.mockClear();
+    Sharing.shareAsync.mockClear();
+    Sharing.isAvailableAsync.mockResolvedValue(true);
+  });
+
+  it('makes a PDF summary from the vault and opens the share sheet', async () => {
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'm1', pregnancyId: 'p1', kind: 'medication', data: { name: 'Folic acid', dose: '5 mg', time_of_day: 'morning' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Download PDF summary' }));
+    await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledWith('file:///cache/summary.pdf', expect.objectContaining({ mimeType: 'application/pdf' })));
+    expect(Print.printToFileAsync.mock.calls[0][0].html).toContain('Folic acid');
+  });
+
+  it('writes every record to a JSON file and shares it', async () => {
+    const { vault, store } = await readyVault();
+    await writeRecord(store, { id: 'q1', pregnancyId: 'p1', kind: 'question', data: { text: 'Iron?' } });
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Download all data (JSON)' }));
+    await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalled());
+    const [uri, options] = Sharing.shareAsync.mock.calls[0];
+    expect(uri).toMatch(/^file:\/\/\/cache\/bloom-data-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(options).toMatchObject({ mimeType: 'application/json' });
+    expect(JSON.parse(written[uri]).records.question).toEqual([expect.objectContaining({ id: 'q1', data: { text: 'Iron?' } })]);
+  });
+
+  it('says so when the phone cannot share files', async () => {
+    Sharing.isAvailableAsync.mockResolvedValue(false);
+    const { vault } = await readyVault();
+    await render(<ProfileScreen />, { wrapper: vaultWrapper(vault) });
+    await fireEvent.press(await screen.findByRole('button', { name: 'Download PDF summary' }));
+    expect(await screen.findByText('This phone can’t share files from Bloom.')).toBeTruthy();
+    expect(Print.printToFileAsync).not.toHaveBeenCalled();
   });
 });
