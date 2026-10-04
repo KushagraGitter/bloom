@@ -48,48 +48,63 @@ npx expo start
 Without Supabase keys the app still opens on the welcome screen, and sign-in
 explains what is missing. Expo Go is enough to run it.
 
-## Install Bloom on your iPhones
+## Builds of your own
 
-Both phones get a private build through EAS internal distribution (ad hoc): an
-install link that only the registered iPhones can open. Nothing goes to the
-App Store. It needs a paid Apple Developer account (99 USD a year) and a free
-Expo account.
+Expo Go is fine for most testing. A build of your own is a real app on the
+phone, with its own icon, and is what both phones use day to day. EAS builds it
+in the cloud from `eas.json`; you need a free Expo account
+(`npx eas-cli@latest login`, then `npx eas-cli@latest init` once to link the
+project, which adds its id to `app.json`; commit that).
 
-One time:
+In Supabase → Authentication → URL Configuration, add `bloom://auth/callback`
+to Redirect URLs (keep the Expo Go address too): every build signs in through it.
 
-1. Join the Apple Developer Program at developer.apple.com/programs.
-2. `npx eas-cli@latest login`, then `npx eas-cli@latest init` to link the
-   project (this adds its id to `app.json`; commit that).
-3. Give the cloud build the Supabase settings, since `.env.local` stays on
-   your computer:
+### Development build (free)
 
-   ```sh
-   npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_SUPABASE_URL --value https://<project-ref>.supabase.co --visibility plaintext
-   npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <anon key> --visibility plaintext
-   ```
+A development build is Bloom with a developer menu that loads the code from
+`npx expo start` on your computer, like Expo Go but with every native module
+in the app. It reads `.env.local` from your computer, so it needs no other setup.
 
-4. Register both iPhones: `npx eas-cli@latest device:create`, then open the
-   link it shows on each phone and install the profile it offers.
-5. In Supabase → Authentication → URL Configuration, add
-   `bloom://auth/callback` to Redirect URLs (keep the Expo Go address too).
+- **Android:** `npx eas-cli@latest build --platform android --profile development`.
+  Open the link on the phone and install the APK (allow installs from the
+  browser when asked). No Google Play account is needed.
+- **iPhone simulator (a Mac with Xcode):**
+  `npx eas-cli@latest build --platform ios --profile development-simulator`,
+  then let the CLI install it on the simulator. No Apple account is needed.
+- **A real iPhone without the paid Apple plan:** only from a Mac with Xcode,
+  `npx expo run:ios --device` with your free Apple ID. The app stops opening
+  after 7 days and needs running again.
 
-Each build:
+Then run `npx expo start` and open Bloom on the phone; it finds your computer
+on the same Wi-Fi.
+
+### Everyday build
+
+`preview` is a standalone build with no developer menu. It needs the Supabase
+settings in EAS, since `.env.local` stays on your computer:
 
 ```sh
-npx eas-cli@latest build --platform ios --profile preview
+npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_SUPABASE_URL --value https://<project-ref>.supabase.co --visibility plaintext
+npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <anon key> --visibility plaintext
 ```
 
-It asks you to sign in to Apple the first time and makes the certificate and
-provisioning profile itself. When it finishes, open the install link on each
-iPhone. iOS asks for Developer Mode the first time (Settings → Privacy &
-Security → Developer Mode); turn it on and restart. A phone added later needs
-`device:create` and a new build.
+- **Android:** `npx eas-cli@latest build --platform android --profile preview`,
+  then install the APK from the link on each phone.
+- **iPhone:** needs the paid Apple Developer Program (99 USD a year). Register
+  each phone with `npx eas-cli@latest device:create` and open its link on the
+  phone, then `npx eas-cli@latest build --platform ios --profile preview`. It
+  asks you to sign in to Apple the first time and makes the certificate and
+  profile itself. iOS asks for Developer Mode the first time you open it
+  (Settings → Privacy & Security → Developer Mode). A phone added later needs
+  `device:create` and a new build.
 
-The build is a separate app from Expo Go, with its own on-phone database and
+### Moving from Expo Go to a build
+
+A build is a separate app from Expo Go, with its own on-phone database and
 keychain. Before switching, open Bloom in Expo Go on each phone so everything
 has synced. After signing in to the new app, add the household key: scan it
-from the other phone (Expo Go or the new app, Profile → Household key) or type
-the recovery phrase. The records then download and unlock.
+from the other phone (Profile → Household key) or type the recovery phrase.
+The records then download and unlock.
 
 ## Checks
 
