@@ -48,6 +48,49 @@ npx expo start
 Without Supabase keys the app still opens on the welcome screen, and sign-in
 explains what is missing. Expo Go is enough to run it.
 
+## Install Bloom on your iPhones
+
+Both phones get a private build through EAS internal distribution (ad hoc): an
+install link that only the registered iPhones can open. Nothing goes to the
+App Store. It needs a paid Apple Developer account (99 USD a year) and a free
+Expo account.
+
+One time:
+
+1. Join the Apple Developer Program at developer.apple.com/programs.
+2. `npx eas-cli@latest login`, then `npx eas-cli@latest init` to link the
+   project (this adds its id to `app.json`; commit that).
+3. Give the cloud build the Supabase settings, since `.env.local` stays on
+   your computer:
+
+   ```sh
+   npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_SUPABASE_URL --value https://<project-ref>.supabase.co --visibility plaintext
+   npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <anon key> --visibility plaintext
+   ```
+
+4. Register both iPhones: `npx eas-cli@latest device:create`, then open the
+   link it shows on each phone and install the profile it offers.
+5. In Supabase → Authentication → URL Configuration, add
+   `bloom://auth/callback` to Redirect URLs (keep the Expo Go address too).
+
+Each build:
+
+```sh
+npx eas-cli@latest build --platform ios --profile preview
+```
+
+It asks you to sign in to Apple the first time and makes the certificate and
+provisioning profile itself. When it finishes, open the install link on each
+iPhone. iOS asks for Developer Mode the first time (Settings → Privacy &
+Security → Developer Mode); turn it on and restart. A phone added later needs
+`device:create` and a new build.
+
+The build is a separate app from Expo Go, with its own on-phone database and
+keychain. Before switching, open Bloom in Expo Go on each phone so everything
+has synced. After signing in to the new app, add the household key: scan it
+from the other phone (Expo Go or the new app, Profile → Household key) or type
+the recovery phrase. The records then download and unlock.
+
 ## Checks
 
 ```sh
