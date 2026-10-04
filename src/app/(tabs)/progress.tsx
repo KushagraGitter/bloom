@@ -127,6 +127,7 @@ function WeeklyChart({ pregnancyId, lmpDate, units }: { pregnancyId: string; lmp
       </View>
 
       {history.isSuccess && chart.bars.length === 0 && <Text muted>{chart.empty}</Text>}
+      {history.isError && <Text muted>Couldn&apos;t load your check-ins.</Text>}
 
       {chart.bars.length > 0 && (
         <>

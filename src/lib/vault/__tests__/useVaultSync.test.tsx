@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { newHouseholdKey } from '@/lib/vault/crypto';
 import { createLocalStoreAsync, writeRecord, type LocalStore } from '@/lib/vault/localStore';
 import { fakeServer, memoryDb } from '@/lib/vault/testHelpers';
-import { createSyncRunner, useVaultSync } from '@/lib/vault/useVaultSync';
+import { RETRY_MS, createSyncRunner, useVaultSync } from '@/lib/vault/useVaultSync';
 
 jest.mock('expo-crypto', () => ({
   getRandomBytes: (n: number) => crypto.getRandomValues(new Uint8Array(n)),
@@ -139,5 +139,28 @@ describe('useVaultSync', () => {
     await unmount();
     expect(supabase.removeChannel).toHaveBeenCalledWith(channel());
     expect(remove).toHaveBeenCalled();
+  });
+
+  it('keeps trying while offline, and clears the error once a sync gets through', async () => {
+    const { server, mine, mount } = await setup();
+    const push = server.remote.push;
+    let offline = true;
+    server.remote.push = (batch) => (offline ? Promise.reject(new Error('offline')) : push(batch));
+    await writeRecord(mine, { id: 'd', pregnancyId: P, kind: 'reading', data: { v: 3 } });
+
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    try {
+      const { result } = await mount(mine);
+      await act(async () => jest.advanceTimersByTimeAsync(0));
+      expect(result.current.error).toEqual(new Error('offline'));
+
+      offline = false;
+      await act(async () => jest.advanceTimersByTimeAsync(RETRY_MS));
+      await act(async () => jest.advanceTimersByTimeAsync(0));
+      expect(result.current.error).toBeNull();
+      expect(server.rows.has('d')).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

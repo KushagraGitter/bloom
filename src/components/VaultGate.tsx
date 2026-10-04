@@ -5,6 +5,7 @@ import { StyleSheet } from 'react-native';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Text } from '@/components/Text';
+import { OfflineNote } from '@/components/VaultNotice';
 import { useVault } from '@/lib/vault/VaultProvider';
 
 /**
@@ -17,7 +18,12 @@ export function VaultGate({ what, children }: { what: string; children: ReactNod
 
   switch (vault.state) {
     case 'ready':
-      return <>{children}</>;
+      return (
+        <>
+          <OfflineNote />
+          {children}
+        </>
+      );
     case 'needs-key':
       return (
         <Card size="card" style={styles.card}>
