@@ -10,7 +10,8 @@ gets a login that sees everything and can log on her behalf.
 
 - **App:** Expo (SDK 57) + TypeScript + Expo Router, one codebase for iOS and Android
 - **Data:** TanStack Query, Supabase JS client, Zustand for small UI state
-- **Backend:** Supabase (Postgres with Row Level Security, Auth, Storage, Realtime)
+- **Backend:** Supabase (Postgres with Row Level Security, Auth, Storage, Realtime, one Edge Function)
+- **AI:** Claude, called only from the `scan` Edge Function, so no AI key is ever in the app
 
 ## Layout
 
@@ -18,7 +19,7 @@ gets a login that sees everything and can log on her behalf.
 src/app/            routes (each design artboard becomes one)
   (auth)/           welcome and Google sign-in
   onboarding.tsx    7 setup questions, or join a partner's pregnancy by code
-  (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment), Meals, Vitamins and Progress (weekly charts, 7-day averages, bump diary); Reports is a placeholder
+  (tabs)/           Today (check-ins, kicks, water, tools, vitamins, next appointment), Meals, Vitamins, Reports (reports read by AI and checked before saving, questions for the next visit) and Progress (weekly charts, 7-day averages, bump diary)
   appointments.tsx  month calendar, what is coming up, book and cancel appointments
   mood.tsx          mood, symptoms and a note, saved as entries with a history (opened from Today's tools)
   contractions.tsx  contraction timer: lengths, gaps and counts per session, earlier sessions, her own "when to call" notes
@@ -31,6 +32,7 @@ src/lib/            Supabase client, auth, session, data hooks, readings, profil
   vault/            on-phone record store, encryption, household key and encrypted sync
 supabase/
   migrations/       SQL schema and RLS policies
+  functions/scan/   Edge Function that sends a report to Claude and returns what it read
   tests/            RLS checks against a throwaway Postgres
 ```
 
@@ -138,6 +140,57 @@ The next screens on the store (Progress, Mood and symptoms) can reuse what Meals
 is built from: `src/lib/vault/records.ts` for reading (`useVaultQuery`), saving
 and removing records and making their ids, `VaultGate` for a phone that is not
 ready, and `TimeField` for an optional time.
+
+## Reports and AI scanning
+
+Reports keeps blood tests, scans and doctors' notes, and a list of questions for
+the next visit. Like Meals, both are vault records (`report` and `question`), so
+nothing typed or read reaches Supabase in a readable form. `src/lib/reports.ts`
+has the shapes, `src/lib/scan.ts` picks and sends the file, and
+`src/lib/useReports.ts` has the hooks.
+
+How a scan works:
+
+1. She takes a photo, picks one, or picks a PDF (up to 10 MB). A photo is shrunk
+   on the phone to the size Claude reads (1568 px on the long edge).
+2. The app sends it to the `scan` Edge Function with her pregnancy week.
+3. The function checks she is signed in and a member of the household, takes one
+   scan from the day's allowance (`claim_scan`, 50 a day per household), and sends
+   the file to Claude with a fixed JSON shape (structured outputs). The prompt
+   says to copy only what is printed, leave out what can't be read and list it
+   instead, use only the ranges printed on the report, and never diagnose or
+   advise.
+4. The draft comes back to the review sheet ("Filled by AI · check & edit"). She
+   can rename it, change the type, week and lab, correct or remove any value and
+   add her own. Nothing is saved until she taps Save report.
+
+The file is never stored: not in Supabase, not in the vault, and the function
+doesn't log it. Only the file's name is kept with the report. The function sends
+it to the Anthropic API, which handles it under Anthropic's API data terms.
+
+If a scan can't be done (no connection, the day's scans used up, the function not
+deployed yet, or the AI couldn't read it) the sheet says so and offers to fill
+the report in by hand.
+
+Good to know:
+
+- Values show the lab's own printed range and whether the report itself marks
+  them. Bloom never labels a result normal or abnormal, and every AI summary
+  carries "Not a diagnosis. Go over results with your doctor."
+- The week is worked out from the date printed on the report when there is one.
+- Only lab and scan reports are scanned for now. Prescription scanning (into
+  Vitamins) and meal photos ("Snap your plate") can reuse the same function later.
+
+### Set up the scan function
+
+1. Run `supabase/migrations/20261004120000_scan_usage.sql` (the daily allowance).
+2. Add the secret `ANTHROPIC_API_KEY` under Edge Functions → Secrets. Optional:
+   `SCAN_MODEL` (default `claude-sonnet-5-5`) and `SCAN_DAILY_LIMIT` (default 50).
+3. Deploy: `npx supabase functions deploy scan` (keep JWT verification on).
+
+Until it is deployed, the app says AI reading isn't switched on yet and reports
+can still be added by hand. `npm test` covers the function's logic
+(`supabase/functions/scan/handler.ts`); `index.ts` is the Deno entry point.
 
 ## Reminders
 
