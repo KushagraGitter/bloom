@@ -36,5 +36,6 @@ Deno.serve((req) => {
       return data === true;
     },
     callClaude: (request) => anthropic!.beta.messages.create(request),
+    log: (line) => console.error(line),
   });
 });

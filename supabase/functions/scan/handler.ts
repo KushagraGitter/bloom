@@ -231,7 +231,21 @@ export type ScanDeps = {
   /** Calls claim_scan as the signed-in user: true = go ahead, false = allowance used up; throws ScanError('not_member') for non-members. */
   claimScan: (pregnancyId: string, dailyLimit: number) => Promise<boolean>;
   callClaude: (request: ReturnType<typeof buildClaudeRequest>) => Promise<ClaudeResponse>;
+  /** Writes one line to the function's logs. Only ever given error details, never report content. */
+  log?: (line: string) => void;
 };
+
+/** Status, type and message of a failed call, short enough for a log line. API errors carry no report content. */
+export function describeError(e: unknown): string {
+  if (!e || typeof e !== 'object') return String(e).slice(0, 300);
+  const err = e as { status?: unknown; name?: unknown; message?: unknown; error?: { error?: { type?: unknown } } };
+  const parts = [
+    typeof err.status === 'number' ? String(err.status) : '',
+    typeof err.error?.error?.type === 'string' ? err.error.error.type : typeof err.name === 'string' ? err.name : '',
+    typeof err.message === 'string' ? err.message : '',
+  ];
+  return parts.filter(Boolean).join(' ').slice(0, 300);
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -262,6 +276,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
   try {
     allowed = await deps.claimScan(scan.pregnancyId, deps.dailyLimit);
   } catch (e) {
+    if (!(e instanceof ScanError)) deps.log?.(`claim_scan failed: ${describeError(e)}`);
     return fail(e instanceof ScanError ? e.code : 'ai_failed');
   }
   if (!allowed) return fail('daily_limit');
@@ -269,12 +284,14 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
   let response: ClaudeResponse;
   try {
     response = await deps.callClaude(buildClaudeRequest(scan, deps.model));
-  } catch {
+  } catch (e) {
+    deps.log?.(`Claude call failed: ${describeError(e)}`);
     return fail('ai_failed');
   }
   try {
     return json(200, { draft: parseClaudeResponse(response) });
   } catch (e) {
+    deps.log?.(`Claude answer not usable: stop_reason=${response.stop_reason}`);
     return fail(e instanceof ScanError ? e.code : 'ai_failed');
   }
 }
