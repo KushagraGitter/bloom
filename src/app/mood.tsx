@@ -108,7 +108,7 @@ export default function MoodScreen() {
   const saveLabel = save.isPending ? 'Saving…' : saved ? 'Saved. Tap to save again' : mood ? 'Save today’s entry' : 'Pick a mood to save';
 
   return (
-    <Screen>
+    <Screen keyboardAware>
       <BackButton label="Today" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
 
       <View style={styles.header}>
