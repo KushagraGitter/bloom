@@ -41,6 +41,8 @@ import {
 import { useSession } from '@/lib/session';
 import { NoShareSheetError, useExportData, type ExportFormat } from '@/lib/useExport';
 import { useNotificationPermission } from '@/lib/useReminders';
+import { useSavedThoughts } from '@/lib/useWeeklyCards';
+import { useWeekNudge } from '@/lib/weekNudge';
 import { useVault, type VaultState } from '@/lib/vault/VaultProvider';
 import { makeStyles, useAppearance, useTheme } from '@/theme/theme';
 import { fonts, radius } from '@/theme/tokens';
@@ -142,6 +144,10 @@ export default function ProfileScreen() {
         </Text>
       )}
 
+      <Group title="WEEKLY CARDS">
+        <WeeklyCardsRow pregnancyId={pregnancy.id} />
+      </Group>
+
       <Reminders pregnancyId={pregnancy.id} />
 
       <UnitsSetting pregnancyId={pregnancy.id} units={pregnancy.units} canEdit={isOwner} />
@@ -176,6 +182,13 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
       <View style={styles.groupBox}>{children}</View>
     </View>
   );
+}
+
+function WeeklyCardsRow({ pregnancyId }: { pregnancyId: string }) {
+  const saved = useSavedThoughts(pregnancyId);
+  const count = saved.data?.length;
+  const value = count === undefined ? '' : count === 0 ? 'None saved' : `${count} saved`;
+  return <Row label="All weeks and saved thoughts" value={value} onPress={() => router.push('/weeks')} first />;
 }
 
 function Row({ label, value, onPress, first }: { label: string; value: string; onPress?: () => void; first?: boolean }) {
@@ -451,6 +464,7 @@ function Reminders({ pregnancyId }: { pregnancyId: string }) {
   const styles = useStyles();
   const prefs = useReminderPrefs(pregnancyId);
   const set = useSetReminder(pregnancyId);
+  const weekNudge = useWeekNudge();
   const { state: permission } = useNotificationPermission();
   const [test, setTest] = useState<'idle' | 'sent' | 'failed'>('idle');
 
@@ -477,6 +491,13 @@ function Reminders({ pregnancyId }: { pregnancyId: string }) {
           />
         </View>
       ))}
+      <View style={[styles.row, styles.rowDivider]}>
+        <View style={styles.flex}>
+          <Text style={styles.reminderLabel}>New week&apos;s cards</Text>
+          <Text variant="caption">9 am on the day a week starts, on this phone</Text>
+        </View>
+        <Toggle label="New week's cards" value={!!weekNudge.on} disabled={weekNudge.on === null} onValueChange={(on) => weekNudge.set(on)} />
+      </View>
       {permission === 'denied' && (
         <View style={[styles.notice, styles.rowDivider]}>
           <Text variant="caption">

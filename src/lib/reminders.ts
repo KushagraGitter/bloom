@@ -13,6 +13,7 @@
 import { clock, localDate, type Appointment } from '@/lib/appointments';
 import type { ReminderKind } from '@/lib/onboarding';
 import { addDays, gestationalAge, localToday } from '@/lib/pregnancy';
+import { FIRST_CARD_WEEK, LAST_CARD_WEEK } from '@/lib/weeklyCards';
 import { TIMES, doseKey, dueOn, inDisplayOrder, type Dose, type Medication, type TimeOfDay } from '@/lib/vitamins';
 
 /** The clock time of each vitamin slot. Water, kicks and appointments have their own, below. */
@@ -28,6 +29,12 @@ export const WATER_HOURS = [9, 11, 13, 15, 17, 19];
 /** "Daily, from week 28". */
 export const KICKS_TIME = { hour: 20, minute: 0 };
 export const KICKS_FROM_WEEK = 28;
+
+/** A new week's cards are announced at this hour on the day the week starts. */
+export const WEEK_NUDGE_TIME = { hour: 9, minute: 0 };
+
+/** How many week starts ahead are scheduled. */
+export const WEEK_NUDGES_AHEAD = 2;
 
 /** An appointment with no time of its own is announced at this hour the day before. */
 export const UNTIMED_DAY_BEFORE_HOUR = 9;
@@ -46,7 +53,7 @@ export type ReminderTrigger = { type: 'daily'; hour: number; minute: number } | 
 export type PlannedReminder = {
   /** Stable, so a reminder that is still wanted is recognised after a refresh. */
   key: string;
-  kind: ReminderKind;
+  kind: ReminderKind | 'week';
   title: string;
   body: string;
   trigger: ReminderTrigger;
@@ -60,6 +67,8 @@ export type ReminderPlanInput = {
   appointments: Appointment[];
   /** First day of the last period, for the week kick counts start. */
   lmpDate: string;
+  /** This phone's “new week” switch, which lives on the phone rather than with the others. */
+  weekNudge?: boolean;
   now: Date;
 };
 
@@ -126,6 +135,24 @@ function kickReminders({ lmpDate, now }: ReminderPlanInput): PlannedReminder[] {
   ];
 }
 
+function weekReminders({ lmpDate, now }: ReminderPlanInput): PlannedReminder[] {
+  const { weeks } = gestationalAge(lmpDate, localToday(now));
+  const out: PlannedReminder[] = [];
+  for (let week = weeks + 1; week <= weeks + WEEK_NUDGES_AHEAD; week++) {
+    if (week < FIRST_CARD_WEEK || week > LAST_CARD_WEEK) continue;
+    const at = atLocal(addDays(lmpDate, week * 7), WEEK_NUDGE_TIME.hour, WEEK_NUDGE_TIME.minute);
+    if (at <= now) continue;
+    out.push({
+      key: `week:${week}`,
+      kind: 'week',
+      title: `Week ${week} is here`,
+      body: 'This week’s cards are ready on Today.',
+      trigger: { type: 'date', at },
+    });
+  }
+  return out;
+}
+
 function appointmentReminders({ appointments, now }: ReminderPlanInput): PlannedReminder[] {
   const today = localToday(now);
   const last = addDays(today, APPOINTMENT_DAYS_AHEAD);
@@ -177,6 +204,7 @@ export function planReminders(input: ReminderPlanInput): PlannedReminder[] {
     ...(prefs.water ? waterReminders() : []),
     ...(prefs.kicks ? kickReminders(input) : []),
     ...(prefs.appointments ? appointmentReminders(input) : []),
+    ...(input.weekNudge ? weekReminders(input) : []),
   ];
   const daily = all.filter((r) => r.trigger.type === 'daily');
   const dated = all
