@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bloom privacy policy</title>
+<style>
+  :root { --ground: #F7F2FF; --ink: #1E1433; --muted: #5B4E73; --accent: #6B3FF0; }
+  @media (prefers-color-scheme: dark) { :root { --ground: #15101F; --ink: #F3EDFF; --muted: #B9ADD1; --accent: #B79CFF; } }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 32px; line-height: 1.15; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 32px 0 8px; }
+  .updated { color: var(--muted); margin: 0 0 24px; }
+  a { color: var(--accent); }
+  li { margin: 6px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Bloom privacy policy</h1>
+<p class="updated">Last updated 5 October 2026</p>
+<p>Bloom is a pregnancy diary for one household: the person who is pregnant and, if she invites them, her partner. This policy says what Bloom keeps, where it goes and how to delete it. Bloom has no ads, no analytics and no tracking, and never sells or shares your data for advertising.</p>
+<h2>What stays locked on your phone</h2>
+<p>Your diary lives on your phone. Check-ins, weight, blood pressure, blood sugar, kicks, water, meals, vitamins and medicines, appointments, mood and symptoms, contractions, saved reports, bump photos, weekly card notes and your profile details are stored in an on-phone database.</p>
+<p>To keep two phones in step, each record is locked (encrypted with XChaCha20-Poly1305) with your household key before it leaves the phone. Only the locked copy is uploaded. The household key itself never leaves your phones: it moves from one phone to the other by QR code or a recovery phrase you write down. Nobody else, including the developer and our hosting provider, can read these records.</p>
+<h2>What our server can read</h2>
+<p>Bloom uses Supabase (supabase.com) for sign-in, syncing and two small server functions. Supabase stores, readable to the service:</p>
+<ul>
+  <li>Your account: your name, email address and profile picture link from Google, and a user ID.</li>
+  <li>Who belongs to the household (owner or partner) and short-lived invite codes.</li>
+  <li>The answers given when Bloom was first set up (such as due date or last period date, how many babies, health conditions, blood group, height and weight before pregnancy, doctor, hospital and emergency contact), so that a partner joining by code sees the same pregnancy. Later changes to these details are kept locked on the phone instead.</li>
+  <li>Which reminders are on and at what times.</li>
+  <li>A daily count of how many scans the household has started, so a fault cannot run up costs.</li>
+  <li>The locked records described above, which the service cannot open.</li>
+</ul>
+<h2>Scanning a report, prescription or plate</h2>
+<p>When you choose to scan a report, prescription or meal photo, that one image or PDF is sent over an encrypted connection to our server function, which passes it to Claude, an AI model made by Anthropic, to read the values. What it reads comes back to your phone for you to check before anything is saved, and what you save is locked like everything else. Bloom does not store the image on its server. Anthropic processes it on our behalf under its commercial terms, does not use it to train its models, and may keep it for a limited time for safety and abuse monitoring as its policies describe. If you never scan, nothing is sent to Anthropic.</p>
+<h2>Health Connect and Apple Health</h2>
+<p>If you switch them on in Profile → Connected health, Bloom reads sleep, resting heart rate, heart rate variability and steps, and, if you choose, weight, blood sugar and blood pressure, from Health Connect on Android or Apple Health on iPhone. On Android Bloom may also ask to read history older than 30 days, so the diary can show how the pregnancy began. Bloom only reads; it never writes to Health Connect or Apple Health.</p>
+<p>Data read from Health Connect or Apple Health is used only to show it in your pregnancy diary and charts. It is summarised on your phone and locked with your household key before it is synced, so only your household can read it. It is never used for advertising, never sold, never used to train AI models and never shared with anyone, including Anthropic. You can switch each item off at any time in Bloom or in the Health Connect or Health app.</p>
+<p>Bloom's use of information received from Health Connect follows the Health Connect Permissions policy, including its Limited Use requirements.</p>
+<h2>Camera, photos and notifications</h2>
+<p>The camera is used to scan the household key QR code, take bump photos and scan reports or plates. Photos you add are locked with the household key before they are synced. Reminders are scheduled on the phone itself; Bloom does not send push messages from a server.</p>
+<h2>Your partner</h2>
+<p>If you invite a partner, they can see and add to the household's diary. The owner can remove a partner at any time in Profile, and a partner can delete their own account.</p>
+<h2>Keeping and deleting your data</h2>
+<p>Your data is kept until you delete it. In Bloom, go to Profile → Your data to download everything (PDF or JSON) or tap Delete account. Deleting the owner's account removes the account, the household, its members, invite codes, locked records and scan counts from our server straight away, and clears Bloom on that phone. A partner deleting their account removes only their own account and membership. Copies in Supabase's routine server backups expire on its normal backup schedule.</p>
+<p>If you can no longer open the app, you can ask us to delete your account: see the delete account page.</p>
+<h2>Security</h2>
+<p>All traffic uses HTTPS. Records are encrypted on the phone before upload. Server tables are protected so each household can only reach its own rows. An optional app lock asks for your fingerprint, face or phone passcode when Bloom opens.</p>
+<h2>Children</h2>
+<p>Bloom is meant for adults and is not directed at children.</p>
+<h2>Not medical advice</h2>
+<p>Bloom is not a medical device and does not diagnose, treat, cure or prevent any medical condition. Always follow the advice of your doctor or midwife, and call them or emergency services if you are worried.</p>
+<h2>Changes and contact</h2>
+<p>If this policy changes, the new version will appear here and in the app with a new date. Questions or requests: write to the developer email address shown on Bloom’s Google Play page.</p>
+<p><a href="../delete-account/">Delete your account</a></p>
+</main>
+</body>
+</html>

@@ -28,6 +28,10 @@
         "android.permission.health.READ_BLOOD_GLUCOSE",
         "android.permission.health.READ_BLOOD_PRESSURE",
         "android.permission.health.READ_HEALTH_DATA_HISTORY"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -81,6 +85,7 @@
         }
       ],
       "react-native-health-connect",
+      "./plugins/withHealthConnectPrivacyLink",
       [
         "expo-build-properties",
         {

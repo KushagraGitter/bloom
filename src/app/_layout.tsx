@@ -111,6 +111,7 @@ function RootNavigator() {
           <Stack.Screen name="dev/components" />
         </Stack.Protected>
         <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="privacy" />
       </Stack>
       {signedIn && <AppLock />}
     </VaultProvider>
