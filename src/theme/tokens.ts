@@ -142,6 +142,8 @@ export function shadowsFor(c: Palette) {
     md: `3px 3px 0px ${c.outline}`,
     lg: `5px 5px 0px ${c.outline}`,
     cta: `4px 4px 0px ${c.purple}`,
+    /** The weekly card: the large outline shadow with a soft drop under it, so it lifts off the page. */
+    lift: `5px 5px 0px ${c.outline}, 0px 10px 24px rgba(0, 0, 0, 0.22)`,
   } as const;
 }
 

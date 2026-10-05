@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
+  Easing,
   FlatList,
   Pressable,
   useWindowDimensions,
@@ -21,7 +22,7 @@ import { CARD_META, cardLabel, cardsFor, deckOrder, deckWeek, type CardKind } fr
 import { makeStyles, useTheme } from '@/theme/theme';
 import { accents, fonts, space } from '@/theme/tokens';
 
-const CARD_HEIGHT = 400;
+const CARD_HEIGHT = 420;
 const FLIP_MS = 320;
 
 export default function WeekDeckScreen() {
@@ -40,7 +41,9 @@ export default function WeekDeckScreen() {
   const saved = useSavedThoughts(pregnancyId);
   const saveThought = useSaveThought(pregnancyId);
   const { width } = useWindowDimensions();
-  const pageWidth = width - space.xl * 2;
+  // Pages run the full width so the card's shadow has the gutter to fall into
+  // instead of being cut off at the list's edge.
+  const pageWidth = width;
   const list = useRef<FlatList<CardKind>>(null);
   const [page, setPage] = useState(0);
 
@@ -113,9 +116,9 @@ export default function WeekDeckScreen() {
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
         getItemLayout={(_d, index) => ({ length: pageWidth, offset: pageWidth * index, index })}
-        style={{ width: pageWidth }}
+        style={styles.deck}
         renderItem={({ item }) => (
-          <View style={{ width: pageWidth }}>
+          <View style={[styles.page, { width: pageWidth }]}>
             <FlipCard
               key={`${week}:${item}`}
               label={cardLabel(item, partnerName)}
@@ -155,10 +158,16 @@ export default function WeekDeckScreen() {
   );
 }
 
-/** One card: the front line, and the back after a tap. With reduced motion it swaps without turning. */
+/**
+ * One card: the front line, and the back after a tap. Only one face is drawn at
+ * a time, so nothing of the other face (its outline or shadow) can peek past the
+ * corners. The card turns edge-on, swaps faces, and turns back; with reduced
+ * motion it simply swaps.
+ */
 function FlipCard({ label, tone, front, back, lead }: { label: string; tone: string; front: string; back: string; lead: string | null }) {
   const styles = useStyles();
   const [flipped, setFlipped] = useState(false);
+  const [shown, setShown] = useState<'front' | 'back'>('front');
   const [turn] = useState(() => new Animated.Value(0));
   const [reduceMotion, setReduceMotion] = useState(false);
 
@@ -174,30 +183,24 @@ function FlipCard({ label, tone, front, back, lead }: { label: string; tone: str
 
   const toggle = () => {
     const next = !flipped;
+    const side = next ? 'back' : 'front';
     setFlipped(next);
-    if (reduceMotion) turn.setValue(next ? 1 : 0);
-    else Animated.timing(turn, { toValue: next ? 1 : 0, duration: FLIP_MS, useNativeDriver: true }).start();
+    if (reduceMotion) {
+      setShown(side);
+      return;
+    }
+    turn.stopAnimation();
+    Animated.timing(turn, { toValue: 90, duration: FLIP_MS / 2, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(
+      ({ finished }) => {
+        if (!finished) return;
+        setShown(side);
+        turn.setValue(-90);
+        Animated.timing(turn, { toValue: 0, duration: FLIP_MS / 2, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      },
+    );
   };
 
-  const frontTurn = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-  const backTurn = turn.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
-
-  const face = (side: 'front' | 'back') => (
-    <Card tone={tone} elevation="lg" style={styles.card}>
-      <Text style={styles.overline}>{label.toUpperCase()}</Text>
-      {side === 'front' ? (
-        <>
-          <Text style={styles.front}>{front}</Text>
-          <Text style={styles.hint}>Tap to turn over</Text>
-        </>
-      ) : (
-        <>
-          {lead && <Text style={styles.lead}>{lead}</Text>}
-          <Text style={styles.back}>{back}</Text>
-        </>
-      )}
-    </Card>
-  );
+  const rotateY = turn.interpolate({ inputRange: [-90, 90], outputRange: ['-90deg', '90deg'] });
 
   return (
     <Pressable
@@ -205,15 +208,24 @@ function FlipCard({ label, tone, front, back, lead }: { label: string; tone: str
       accessibilityLabel={flipped ? `${label}. ${lead ? `${lead}. ` : ''}${back}` : `${label}. ${front}`}
       accessibilityHint={flipped ? 'Turns back to the front' : 'Turns the card over'}
       onPress={toggle}
-      style={styles.flip}>
-      {reduceMotion ? (
-        face(flipped ? 'back' : 'front')
-      ) : (
-        <>
-          <Animated.View style={[styles.side, { transform: [{ perspective: 1000 }, { rotateY: frontTurn }] }]}>{face('front')}</Animated.View>
-          <Animated.View style={[styles.side, { transform: [{ perspective: 1000 }, { rotateY: backTurn }] }]}>{face('back')}</Animated.View>
-        </>
-      )}
+      style={styles.grow}>
+      <Animated.View style={[styles.grow, { transform: [{ perspective: 1200 }, { rotateY }] }]}>
+        <Card tone={tone} style={styles.card}>
+          <Text style={styles.overline}>{label.toUpperCase()}</Text>
+          {shown === 'front' ? (
+            <>
+              <Text style={styles.front}>{front}</Text>
+              <Text style={styles.hint}>Tap to read more</Text>
+            </>
+          ) : (
+            <>
+              {lead && <Text style={styles.lead}>{lead}</Text>}
+              <Text style={styles.back}>{back}</Text>
+              <Text style={styles.hint}>Tap to turn back</Text>
+            </>
+          )}
+        </Card>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -233,17 +245,20 @@ function NavButton({ label, direction, disabled, onPress }: { label: string; dir
   );
 }
 
-const useStyles = makeStyles(({ colors, border }) => ({
+const useStyles = makeStyles(({ colors, border, shadow }) => ({
   header: { gap: 2 },
   kicker: { fontFamily: fonts.bodyHeavy, fontSize: 13, letterSpacing: 1 },
-  flip: { height: CARD_HEIGHT },
-  side: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backfaceVisibility: 'hidden' },
-  card: { flex: 1, padding: 22, gap: 14 },
+  deck: { marginHorizontal: -space.xl, flexGrow: 0 },
+  // Room on every side for the offset shadow and the soft drop below it.
+  page: { paddingHorizontal: space.xl, paddingTop: 4, paddingBottom: 28 },
+  // Every card in the deck grows to the tallest one, so they all match.
+  grow: { flexGrow: 1 },
+  card: { flexGrow: 1, minHeight: CARD_HEIGHT, padding: 24, gap: 14, boxShadow: shadow.lift },
   overline: { fontFamily: fonts.bodyHeavy, fontSize: 13, letterSpacing: 1, color: accents.onAccent },
-  front: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, color: accents.onAccent, flex: 1 },
-  hint: { fontFamily: fonts.bodyBold, fontSize: 13, color: accents.onAccentMuted },
+  front: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, color: accents.onAccent },
+  hint: { fontFamily: fonts.bodyBold, fontSize: 13, color: accents.onAccentMuted, marginTop: 'auto' },
   lead: { fontFamily: fonts.displayBold, fontSize: 19, lineHeight: 23, color: accents.onAccent },
-  back: { fontFamily: fonts.body, fontSize: 17, lineHeight: 25, color: accents.onAccent },
+  back: { fontFamily: fonts.body, fontSize: 17, lineHeight: 26, color: accents.onAccent },
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   navBtn: {
     width: 48,
