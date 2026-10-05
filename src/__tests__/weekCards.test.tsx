@@ -147,7 +147,9 @@ describe('A week’s deck', () => {
 describe('All weeks', () => {
   it('lists the weeks so far, newest first, with a peek at next week and the saved thoughts', async () => {
     await show(<WeeksScreen />);
-    const rows = await screen.findAllByRole('button', { name: /^Week \d+/ });
+    // The rows show before the seen cards load, so wait for this week's status.
+    expect(await screen.findByRole('button', { name: 'Week 24, 5 new' })).toBeTruthy();
+    const rows = screen.getAllByRole('button', { name: /^Week \d+/ });
     expect(rows[0].props.accessibilityLabel).toBe('Week 24, 5 new');
     expect(rows).toHaveLength(21);
     expect(screen.getByText('NEXT WEEK · WEEK 25')).toBeTruthy();

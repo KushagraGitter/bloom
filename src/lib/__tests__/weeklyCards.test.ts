@@ -27,10 +27,10 @@ describe('the weekly card content', () => {
     }
   });
 
-  it('keeps fronts to one short line and backs to a short paragraph', () => {
+  it('keeps fronts to one short line and backs to two short paragraphs', () => {
     for (const card of all) {
       expect({ where: card.where, front: words(card.front) <= 10 }).toEqual({ where: card.where, front: true });
-      expect({ where: card.where, back: words(card.back) >= 8 && words(card.back) <= 70 }).toEqual({ where: card.where, back: true });
+      expect({ where: card.where, back: words(card.back) >= 25 && words(card.back) <= 120 && card.back.split('\n\n').length <= 2 }).toEqual({ where: card.where, back: true });
     }
   });
 

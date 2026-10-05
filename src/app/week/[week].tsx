@@ -23,8 +23,6 @@ import { makeStyles, useTheme } from '@/theme/theme';
 import { accents, fonts, space } from '@/theme/tokens';
 
 const CARD_HEIGHT = 420;
-/** A soft drop under the hard offset shadow, so the card lifts off the page in both themes. */
-const SOFT_SHADOW = '0px 10px 24px rgba(0, 0, 0, 0.22)';
 const FLIP_MS = 320;
 
 export default function WeekDeckScreen() {
@@ -168,7 +166,6 @@ export default function WeekDeckScreen() {
  */
 function FlipCard({ label, tone, front, back, lead }: { label: string; tone: string; front: string; back: string; lead: string | null }) {
   const styles = useStyles();
-  const { shadow } = useTheme();
   const [flipped, setFlipped] = useState(false);
   const [shown, setShown] = useState<'front' | 'back'>('front');
   const [turn] = useState(() => new Animated.Value(0));
@@ -213,7 +210,7 @@ function FlipCard({ label, tone, front, back, lead }: { label: string; tone: str
       onPress={toggle}
       style={styles.grow}>
       <Animated.View style={[styles.grow, { transform: [{ perspective: 1200 }, { rotateY }] }]}>
-        <Card tone={tone} style={[styles.card, { boxShadow: `${shadow.lg}, ${SOFT_SHADOW}` }]}>
+        <Card tone={tone} style={styles.card}>
           <Text style={styles.overline}>{label.toUpperCase()}</Text>
           {shown === 'front' ? (
             <>
@@ -248,7 +245,7 @@ function NavButton({ label, direction, disabled, onPress }: { label: string; dir
   );
 }
 
-const useStyles = makeStyles(({ colors, border }) => ({
+const useStyles = makeStyles(({ colors, border, shadow }) => ({
   header: { gap: 2 },
   kicker: { fontFamily: fonts.bodyHeavy, fontSize: 13, letterSpacing: 1 },
   deck: { marginHorizontal: -space.xl, flexGrow: 0 },
@@ -256,7 +253,7 @@ const useStyles = makeStyles(({ colors, border }) => ({
   page: { paddingHorizontal: space.xl, paddingTop: 4, paddingBottom: 28 },
   // Every card in the deck grows to the tallest one, so they all match.
   grow: { flexGrow: 1 },
-  card: { flexGrow: 1, minHeight: CARD_HEIGHT, padding: 24, gap: 14 },
+  card: { flexGrow: 1, minHeight: CARD_HEIGHT, padding: 24, gap: 14, boxShadow: shadow.lift },
   overline: { fontFamily: fonts.bodyHeavy, fontSize: 13, letterSpacing: 1, color: accents.onAccent },
   front: { fontFamily: fonts.display, fontSize: 30, lineHeight: 34, color: accents.onAccent },
   hint: { fontFamily: fonts.bodyBold, fontSize: 13, color: accents.onAccentMuted, marginTop: 'auto' },
