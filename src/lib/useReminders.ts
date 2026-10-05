@@ -5,6 +5,7 @@ import { useAppointments, useDoses, useLocalToday, useMedications, useMembership
 import { askForPermission, clearScheduled, permissionState, replaceScheduled, type PermissionState } from '@/lib/notifications';
 import { planReminders, planSignature, type PlannedReminder } from '@/lib/reminders';
 import { useSession } from '@/lib/session';
+import { useWeekNudge } from '@/lib/weekNudge';
 
 /**
  * Whether the phone lets the app show notifications. It is read again when the
@@ -56,6 +57,11 @@ export function useReminders(): void {
   const appointments = useAppointments(pregnancy?.id);
   const day = useLocalToday();
   const { state: permission, ask } = useNotificationPermission();
+  const weekNudge = useWeekNudge((s) => s.on);
+  const loadWeekNudge = useWeekNudge((s) => s.load);
+  useEffect(() => {
+    loadWeekNudge();
+  }, [loadWeekNudge]);
 
   // The signature of the plan the phone was last given or is on its way to.
   const applied = useRef<string | null>(null);
@@ -85,7 +91,7 @@ export function useReminders(): void {
   }, []);
 
   // The phone's prompt is shown the first time any reminder is switched on.
-  const wantsAny = !!prefs.data && Object.values(prefs.data).some(Boolean);
+  const wantsAny = (!!prefs.data && Object.values(prefs.data).some(Boolean)) || !!weekNudge;
   const asked = useRef(false);
   useEffect(() => {
     if (permission !== 'undetermined' || !wantsAny || asked.current) return;
@@ -95,20 +101,22 @@ export function useReminders(): void {
 
   // `day` is listed so each new day brings its vitamin reminders into the window.
   useEffect(() => {
-    if (permission !== 'granted' || !pregnancy || !prefs.data || !medications.data || !doses.data || !appointments.data) return;
+    if (permission !== 'granted' || !pregnancy || !prefs.data || !medications.data || !doses.data || !appointments.data || weekNudge === null)
+      return;
     const plan = planReminders({
       prefs: prefs.data,
       medications: medications.data,
       doses: doses.data,
       appointments: appointments.data,
       lmpDate: pregnancy.lmp_date,
+      weekNudge,
       now: new Date(),
     });
     const signature = planSignature(plan);
     if (signature === applied.current) return;
     applied.current = signature;
     request({ plan, signature });
-  }, [permission, pregnancy, prefs.data, medications.data, doses.data, appointments.data, day, request]);
+  }, [permission, pregnancy, prefs.data, medications.data, doses.data, appointments.data, weekNudge, day, request]);
 
   // Nobody to remind: she signed out while the app was open, or the pregnancy is gone (a removed
   // partner). Opening with no session is not the same as signing out, so it clears nothing.

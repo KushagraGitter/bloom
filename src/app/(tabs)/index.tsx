@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 
 import { BottomSheet, Button, CalendarIcon, Card, CheckIcon, Chip, Screen, SmileIcon, Text, TextField, TimerIcon } from '@/components';
 import { VaultNotice } from '@/components/VaultNotice';
+import { WeekCardsStrip } from '@/components/WeekCardsStrip';
 import { cardLine, dayLong, dayNumber, localTime, monthAbbr, nextUp } from '@/lib/appointments';
 import {
   useAppointments,
@@ -40,6 +41,7 @@ import {
 } from '@/lib/readings';
 import { useSession } from '@/lib/session';
 import { TIMES, doseKey, doseLine, dueOn, indexDoses, inDisplayOrder, tickedBy } from '@/lib/vitamins';
+import { deckWeek } from '@/lib/weeklyCards';
 import { AccentZone, isAccentFill, makeStyles, useTheme } from '@/theme/theme';
 import { accents, fonts, radius, touchTarget } from '@/theme/tokens';
 
@@ -70,6 +72,7 @@ export default function TodayScreen() {
   const name = profile.data?.name?.trim();
   const firstName = name?.split(' ')[0];
   const sizeLine = babySizeLine(ga.weeks, pregnancy.babies);
+  const cardWeek = deckWeek(ga.weeks);
   const rows = today.data ?? [];
 
   const whoLogged = (r: Reading) => {
@@ -100,28 +103,36 @@ export default function TodayScreen() {
 
       <VaultNotice />
 
-      <Card tone={colors.purple} size="hero" elevation="lg" style={styles.hero}>
-        <View style={styles.sun} />
-        <View style={styles.weekBadge}>
-          <Text style={styles.weekNum}>{ga.weeks}</Text>
-          <Text style={styles.weekLbl}>WEEKS</Text>
-        </View>
-        <Text style={styles.kicker} color={colors.onPurple}>
-          TRIMESTER {ga.trimester} · DAY {ga.days}
-        </Text>
-        {sizeLine && <Text style={styles.size}>{sizeLine}</Text>}
-        <View style={[styles.track, !sizeLine && styles.trackLow]}>
-          <View style={[styles.fill, { width: `${Math.round(ga.progress * 100)}%` }]} />
-        </View>
-        <View style={styles.row}>
-          <Text variant="label" color={colors.onPurple}>
-            {Math.ceil(ga.daysToGo / 7)} weeks to go
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint="Opens this week’s cards"
+        disabled={cardWeek === null}
+        onPress={() => cardWeek !== null && router.push(`/week/${cardWeek}`)}>
+        <Card tone={colors.purple} size="hero" elevation="lg" style={styles.hero}>
+          <View style={styles.sun} />
+          <View style={styles.weekBadge}>
+            <Text style={styles.weekNum}>{ga.weeks}</Text>
+            <Text style={styles.weekLbl}>WEEKS</Text>
+          </View>
+          <Text style={styles.kicker} color={colors.onPurple}>
+            TRIMESTER {ga.trimester} · DAY {ga.days}
           </Text>
-          <Text variant="label" color={colors.onPurple}>
-            Due {formatDate(pregnancy.due_date)}
-          </Text>
-        </View>
-      </Card>
+          {sizeLine && <Text style={styles.size}>{sizeLine}</Text>}
+          <View style={[styles.track, !sizeLine && styles.trackLow]}>
+            <View style={[styles.fill, { width: `${Math.round(ga.progress * 100)}%` }]} />
+          </View>
+          <View style={styles.row}>
+            <Text variant="label" color={colors.onPurple}>
+              {Math.ceil(ga.daysToGo / 7)} weeks to go
+            </Text>
+            <Text variant="label" color={colors.onPurple}>
+              Due {formatDate(pregnancy.due_date)}
+            </Text>
+          </View>
+        </Card>
+      </Pressable>
+
+      <WeekCardsStrip pregnancyId={pregnancy.id} weeks={ga.weeks} />
 
       <View style={styles.section}>
         <Text variant="title" accessibilityRole="header">

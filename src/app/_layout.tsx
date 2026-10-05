@@ -106,6 +106,8 @@ function RootNavigator() {
           <Stack.Screen name="contractions" />
           <Stack.Screen name="household-key" />
           <Stack.Screen name="connected-health" />
+          <Stack.Screen name="week/[week]" />
+          <Stack.Screen name="weeks" />
           <Stack.Screen name="dev/components" />
         </Stack.Protected>
         <Stack.Screen name="auth/callback" />

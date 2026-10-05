@@ -268,6 +268,25 @@ describe('planReminders', () => {
     });
   });
 
+  describe('new week cards', () => {
+    // Twenty weeks along on 3 October: week 21 starts on 10 October, week 22 on 17 October.
+    it('announces the next two week starts at 9 am, only when this phone has it on', () => {
+      expect(planReminders(base)).toEqual([]);
+      expect(planReminders({ ...base, weekNudge: true })).toEqual([
+        { key: 'week:21', kind: 'week', title: 'Week 21 is here', body: 'This week’s cards are ready on Today.', trigger: { type: 'date', at: at('2026-10-10', 9) } },
+        { key: 'week:22', kind: 'week', title: 'Week 22 is here', body: 'This week’s cards are ready on Today.', trigger: { type: 'date', at: at('2026-10-17', 9) } },
+      ]);
+    });
+
+    it('starts with week 4 and stops after week 41', () => {
+      const early = planReminders({ ...base, weekNudge: true, lmpDate: addDays(TODAY, -2 * 7) });
+      expect(early.map((r) => r.key)).toEqual(['week:4']);
+      const late = planReminders({ ...base, weekNudge: true, lmpDate: addDays(TODAY, -40 * 7) });
+      expect(late.map((r) => r.key)).toEqual(['week:41']);
+      expect(planReminders({ ...base, weekNudge: true, lmpDate: addDays(TODAY, -41 * 7) })).toEqual([]);
+    });
+  });
+
   describe('everything together', () => {
     it('puts the repeating reminders first, then one-offs from the soonest', () => {
       const plan = planReminders({
