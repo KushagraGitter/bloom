@@ -659,7 +659,7 @@ export const WEEKLY_CARDS: Record<number, WeekCards> = {
     },
     try: {
       front: 'Pack the hospital bag',
-      back: 'Start packing a bag for labour and after the birth: comfy clothes, toiletries, snacks, phone charger, baby clothes and nappies. Ask your hospital for their own list too.\n\nGood extras include maternity pads, a dressing gown, slippers, a nightie or big T-shirt, nipple cream, and a hat and blanket for the baby. Packing now means you’re ready if the baby comes early. You could add a note to Bloom with anything still to buy, so your partner can help.',
+      back: 'Start packing a bag for labour and after the birth: comfy clothes, toiletries, snacks, phone charger, baby clothes and nappies. Ask your hospital for their own list too.\n\nGood extras include maternity pads, a dressing gown, slippers, a nightie or big T-shirt, nipple cream, and a hat and blanket for the baby. Packing now means you’re ready if the baby comes early. Make a short list of anything still to buy and share it with your partner, so they can help.',
     },
     partner: {
       front: 'Pack your own bag',
