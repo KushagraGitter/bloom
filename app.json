@@ -28,6 +28,10 @@
         "android.permission.health.READ_BLOOD_GLUCOSE",
         "android.permission.health.READ_BLOOD_PRESSURE",
         "android.permission.health.READ_HEALTH_DATA_HISTORY"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -36,7 +40,18 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F2FF",
+          "dark": {
+            "backgroundColor": "#15101F"
+          }
+        }
+      ],
       "expo-web-browser",
       "@react-native-community/datetimepicker",
       "expo-sqlite",
@@ -81,6 +96,7 @@
         }
       ],
       "react-native-health-connect",
+      "./plugins/withHealthConnectPrivacyLink",
       [
         "expo-build-properties",
         {

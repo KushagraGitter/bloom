@@ -117,6 +117,7 @@ export default function ProfileScreen() {
         <Row label="Household key" value={KEY_STATUS[vault.state]} onPress={() => router.push('/household-key')} first />
         <AppLockRow />
         <HealthRow />
+        <Row label="Privacy policy" value="Read" onPress={() => router.push('/privacy')} />
       </Group>
 
       {GROUPS.map((g) => (

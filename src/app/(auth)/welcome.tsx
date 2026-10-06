@@ -29,6 +29,9 @@ export default function WelcomeScreen() {
       <View style={styles.actions}>
         <Button label="Get started" variant="cta" onPress={toSignIn} />
         <Button label="I already have an account" onPress={toSignIn} style={styles.link} />
+        <Text muted style={styles.privacy} accessibilityRole="link" onPress={() => router.push('/privacy')}>
+          Privacy policy
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -56,4 +59,5 @@ const useStyles = makeStyles(({ colors, border }) => ({
   hint: { fontSize: 15, lineHeight: 21 },
   actions: { marginTop: 'auto', gap: 10 },
   link: { borderWidth: 0, backgroundColor: 'transparent' },
+  privacy: { textAlign: 'center', fontSize: 14, textDecorationLine: 'underline' },
 }));

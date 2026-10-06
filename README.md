@@ -99,6 +99,34 @@ npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_SUPABASE_
   (Settings → Privacy & Security → Developer Mode). A phone added later needs
   `device:create` and a new build.
 
+### Google Play release
+
+`production` builds an Android App Bundle (`.aab`), the format Google Play takes.
+EAS keeps the version code and bumps it on every production build
+(`appVersionSource: remote`, `autoIncrement`), so each upload is accepted. Raise
+`version` in `app.json` (the version people see) when a release is worth a new number.
+
+```sh
+npx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_SUPABASE_URL --value https://<project-ref>.supabase.co --visibility plaintext
+npx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <anon key> --visibility plaintext
+npx eas-cli@latest build --platform android --profile production
+```
+
+The first build asks to generate an Android upload keystore; let EAS create and
+keep it (Play App Signing holds the real signing key). Upload the first `.aab`
+by hand in Play Console. After that, `npx eas-cli@latest submit --platform android --profile production`
+sends the latest build to the internal testing track as a draft (it needs a
+Google Play service account key, which `eas credentials` stores).
+
+The privacy policy and account deletion pages Google Play links to are built
+from `src/content/privacy-policy.json`, the same text the app shows on its
+Privacy screen and when Health Connect's privacy link is tapped. After editing
+the JSON, run `node scripts/privacy-pages.js` and commit `docs/`. GitHub Pages
+serves them from `docs/` on `main`:
+
+- https://kushagragitter.github.io/bloom/privacy/
+- https://kushagragitter.github.io/bloom/delete-account/
+
 ### Moving from Expo Go to a build
 
 A build is a separate app from Expo Go, with its own on-phone database and
