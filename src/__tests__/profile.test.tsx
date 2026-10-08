@@ -196,6 +196,25 @@ describe('Profile', () => {
   });
 });
 
+describe('Profile connected health', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('shows the row where the build offers health data', async () => {
+    await render(<ProfileScreen />, { wrapper });
+    expect(await screen.findByText('Connected health')).toBeTruthy();
+  });
+
+  it('hides it where the build leaves it out (Health Connect for now)', async () => {
+    const { healthSource } = jest.requireActual<typeof import('@/lib/health/source')>('@/lib/health/source');
+    jest.replaceProperty(healthSource, 'offered', false);
+    await render(<ProfileScreen />, { wrapper });
+    await screen.findByText('Household key');
+    expect(screen.queryByText('Connected health')).toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    expect((require('@/lib/health/source.android') as typeof import('@/lib/health/source')).healthSource.offered).toBe(false);
+  });
+});
+
 describe('Profile household key', () => {
   it('opens the household key screen', async () => {
     const { router } = jest.requireMock<{ router: { push: jest.Mock } }>('expo-router');

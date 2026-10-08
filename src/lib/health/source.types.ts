@@ -12,6 +12,8 @@ export type SourceStatus = 'ready' | 'needs-app' | 'needs-update' | 'needs-build
 export type HealthSource = {
   /** What the phone calls it: Apple Health or Health Connect. */
   name: string;
+  /** Whether this build offers it at all; Profile hides Connected health when not. */
+  offered: boolean;
   /** Whether she can be asked about older data separately (Health Connect only). */
   asksForHistory: boolean;
   status: () => Promise<SourceStatus>;

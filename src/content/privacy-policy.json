@@ -35,7 +35,7 @@
     {
       "heading": "Health Connect and Apple Health",
       "paragraphs": [
-        "If you switch them on in Profile → Connected health, Bloom reads sleep, resting heart rate, heart rate variability and steps, and, if you choose, weight, blood sugar and blood pressure, from Health Connect on Android or Apple Health on iPhone. On Android Bloom may also ask to read history older than 30 days, so the diary can show how the pregnancy began. Bloom only reads; it never writes to Health Connect or Apple Health.",
+        "If you switch them on in Profile → Connected health, Bloom reads sleep, resting heart rate, heart rate variability and steps, and, if you choose, weight, blood sugar and blood pressure, from Apple Health on iPhone. Health Connect on Android is coming in a later update; when it arrives, Bloom may also ask to read history older than 30 days, so the diary can show how the pregnancy began. Bloom only reads; it never writes to Health Connect or Apple Health.",
         "Data read from Health Connect or Apple Health is used only to show it in your pregnancy diary and charts. It is summarised on your phone and locked with your household key before it is synced, so only your household can read it. It is never used for advertising, never sold, never used to train AI models and never shared with anyone, including Anthropic. You can switch each item off at any time in Bloom or in the Health Connect or Health app.",
         "Bloom's use of information received from Health Connect follows the Health Connect Permissions policy, including its Limited Use requirements."
       ]

@@ -36,6 +36,11 @@ function allowedMetrics(granted: readonly { accessType: string; recordType: stri
 /** Health Connect on Android. */
 export const healthSource: HealthSource = {
   name: 'Health Connect',
+  // Off until the import shows what Health Connect reads: Google Play reviews
+  // whether each health permission drives a feature people can see. Turning it
+  // on also needs the health permissions and the react-native-health-connect
+  // plugin back in app.json.
+  offered: false,
   asksForHistory: true,
   status: async () => {
     if (inExpoGo()) return 'needs-build';
