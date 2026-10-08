@@ -23,6 +23,7 @@ import {
 } from '@/lib/data';
 import { openSystemSettings, sendTestReminder } from '@/lib/notifications';
 import { REMINDERS, toggleCondition } from '@/lib/onboarding';
+import { healthSource } from '@/lib/health/source';
 import { useHealthSettings } from '@/lib/health/settings';
 import { gestationalAge, localToday } from '@/lib/pregnancy';
 import {
@@ -116,7 +117,7 @@ export default function ProfileScreen() {
       <Group title="PRIVACY">
         <Row label="Household key" value={KEY_STATUS[vault.state]} onPress={() => router.push('/household-key')} first />
         <AppLockRow />
-        <HealthRow />
+        {healthSource.offered && <HealthRow />}
         <Row label="Privacy policy" value="Read" onPress={() => router.push('/privacy')} />
       </Group>
 

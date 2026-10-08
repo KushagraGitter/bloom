@@ -15,6 +15,7 @@ function healthKit(): HealthKit {
 /** Apple Health on iPhone. */
 export const healthSource: HealthSource = {
   name: 'Apple Health',
+  offered: true,
   asksForHistory: false,
   status: async () => {
     if (inExpoGo()) return 'needs-build';

@@ -100,8 +100,8 @@ function optionalText(text: string): string | null {
   return t ? t : null;
 }
 
-/** The `pregnancies` row onboarding creates. Throws if the date is not usable. */
-export function toPregnancyInsert(a: Answers, today: string) {
+/** The pregnancy details onboarding saves (on the phone, in the vault). Throws if the date is not usable. */
+export function toPregnancyDetails(a: Answers, today: string) {
   const dating = datingFor(a, today);
   if (!dating.ok) throw new Error('The pregnancy date is missing or out of range.');
   return {

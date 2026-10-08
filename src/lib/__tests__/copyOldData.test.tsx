@@ -138,6 +138,11 @@ describe('copyOldData', () => {
     expect((await other.get(MED))?.data).toEqual({ name: 'Iron (new dose)' });
   });
 
+  it('skips a pregnancy row with no details, as households set up since the move have', async () => {
+    await copyOldData(store, 'p1', { ...OLD, pregnancy: { id: 'p1', owner_id: 'me', lmp_date: null, conditions: [] } }, NOW);
+    expect(await store.get(pregnancyDetailsId('p1'))).toBeNull();
+  });
+
   it('copies a pregnancy with no saved time as of now', async () => {
     await copyOldData(store, 'p1', { ...OLD, pregnancy: { lmp_date: '2026-04-15' } }, NOW);
     expect(await store.get(pregnancyDetailsId('p1'))).toMatchObject({ updatedAt: NOW.toISOString() });

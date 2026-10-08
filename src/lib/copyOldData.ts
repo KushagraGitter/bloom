@@ -81,7 +81,8 @@ export async function copyOldData(store: LocalStore, pregnancyId: string, old: O
     added++;
   };
 
-  if (old.pregnancy) {
+  // Households set up since the details moved to the vault have none on the server.
+  if (old.pregnancy?.lmp_date) {
     const savedAt = iso(old.pregnancy.updated_at ?? old.pregnancy.created_at);
     await add(pregnancyDetailsId(pregnancyId), PREGNANCY_KIND, pregnancyDetails(old.pregnancy), savedAt);
   }

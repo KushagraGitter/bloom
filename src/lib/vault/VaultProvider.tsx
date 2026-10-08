@@ -48,9 +48,9 @@ const IDLE: Vault = {
 /** Exported so tests can hand screens a ready vault. */
 export const VaultContext = createContext<Vault>(IDLE);
 
-/** The phone's own database, opened once for the life of the app. */
+/** The phone's own database, opened once for the life of the app. Onboarding uses it before the provider is mounted. */
 let storePromise: Promise<LocalStore> | null = null;
-function openLocalStore() {
+export function openLocalStore() {
   storePromise ??= openLocalStoreAsync();
   storePromise.catch(() => {
     storePromise = null;

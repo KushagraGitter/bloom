@@ -1,7 +1,7 @@
 {
   "title": "Bloom privacy policy",
-  "updated": "5 October 2026",
-  "contactEmail": null,
+  "updated": "8 October 2026",
+  "contactEmail": "kushagra305@gmail.com",
   "intro": [
     "Bloom is a pregnancy diary for one household: the person who is pregnant and, if she invites them, her partner. This policy says what Bloom keeps, where it goes and how to delete it. Bloom has no ads, no analytics and no tracking, and never sells or shares your data for advertising."
   ],
@@ -9,7 +9,7 @@
     {
       "heading": "What stays locked on your phone",
       "paragraphs": [
-        "Your diary lives on your phone. Check-ins, weight, blood pressure, blood sugar, kicks, water, meals, vitamins and medicines, appointments, mood and symptoms, contractions, saved reports, bump photos, weekly card notes and your profile details are stored in an on-phone database.",
+        "Your diary lives on your phone. Your pregnancy details (the dates, health questions, doctor, hospital and emergency contact you give when setting Bloom up), check-ins, weight, blood pressure, blood sugar, kicks, water, meals, vitamins and medicines, appointments, mood and symptoms, contractions, saved reports, bump photos and weekly card notes are stored in an on-phone database.",
         "To keep two phones in step, each record is locked (encrypted with XChaCha20-Poly1305) with your household key before it leaves the phone. Only the locked copy is uploaded. The household key itself never leaves your phones: it moves from one phone to the other by QR code or a recovery phrase you write down. Nobody else, including the developer and our hosting provider, can read these records."
       ]
     },
@@ -20,8 +20,7 @@
       ],
       "bullets": [
         "Your account: your name, email address and profile picture link from Google, and a user ID.",
-        "Who belongs to the household (owner or partner) and short-lived invite codes.",
-        "The answers given when Bloom was first set up (such as due date or last period date, how many babies, health conditions, blood group, height and weight before pregnancy, doctor, hospital and emergency contact), so that a partner joining by code sees the same pregnancy. Later changes to these details are kept locked on the phone instead.",
+        "Who belongs to the household (owner or partner) and short-lived invite codes. The household itself is just an ID: its details are locked on your phones.",
         "Which reminders are on and at what times.",
         "A daily count of how many scans the household has started, so a fault cannot run up costs.",
         "The locked records described above, which the service cannot open."
@@ -36,7 +35,7 @@
     {
       "heading": "Health Connect and Apple Health",
       "paragraphs": [
-        "If you switch them on in Profile → Connected health, Bloom reads sleep, resting heart rate, heart rate variability and steps, and, if you choose, weight, blood sugar and blood pressure, from Health Connect on Android or Apple Health on iPhone. On Android Bloom may also ask to read history older than 30 days, so the diary can show how the pregnancy began. Bloom only reads; it never writes to Health Connect or Apple Health.",
+        "If you switch them on in Profile → Connected health, Bloom reads sleep, resting heart rate, heart rate variability and steps, and, if you choose, weight, blood sugar and blood pressure, from Apple Health on iPhone. Health Connect on Android is coming in a later update; when it arrives, Bloom may also ask to read history older than 30 days, so the diary can show how the pregnancy began. Bloom only reads; it never writes to Health Connect or Apple Health.",
         "Data read from Health Connect or Apple Health is used only to show it in your pregnancy diary and charts. It is summarised on your phone and locked with your household key before it is synced, so only your household can read it. It is never used for advertising, never sold, never used to train AI models and never shared with anyone, including Anthropic. You can switch each item off at any time in Bloom or in the Health Connect or Health app.",
         "Bloom's use of information received from Health Connect follows the Health Connect Permissions policy, including its Limited Use requirements."
       ]

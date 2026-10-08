@@ -19,16 +19,6 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.kushagra.bloom",
-      "permissions": [
-        "android.permission.health.READ_SLEEP",
-        "android.permission.health.READ_RESTING_HEART_RATE",
-        "android.permission.health.READ_HEART_RATE_VARIABILITY",
-        "android.permission.health.READ_STEPS",
-        "android.permission.health.READ_WEIGHT",
-        "android.permission.health.READ_BLOOD_GLUCOSE",
-        "android.permission.health.READ_BLOOD_PRESSURE",
-        "android.permission.health.READ_HEALTH_DATA_HISTORY"
-      ],
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -95,7 +85,6 @@
           "background": false
         }
       ],
-      "react-native-health-connect",
       "./plugins/withHealthConnectPrivacyLink",
       [
         "expo-build-properties",
