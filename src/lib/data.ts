@@ -1,17 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { localTime, toAppointment, type Appointment, type AppointmentRow } from '@/lib/appointments';
-import { REMINDERS, toPregnancyInsert, type Answers, type ReminderKind } from '@/lib/onboarding';
+import { REMINDERS, toPregnancyDetails, type Answers, type ReminderKind } from '@/lib/onboarding';
 import { dueDateFromLmp, localToday } from '@/lib/pregnancy';
 import type { PregnancyRow } from '@/lib/profile';
 import { CHECKINS, startOfLocalDay, type CheckinType, type Reading } from '@/lib/readings';
 import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
+import { resolveHouseholdKey } from '@/lib/vault/householdKey';
+import { loadHouseholdKey, saveHouseholdKey } from '@/lib/vault/keys';
+import { writeRecord } from '@/lib/vault/localStore';
 import { listItems, newId, readyStore, removeItems, saveItem, stableId, useVaultQuery, vaultQueryKey, type VaultItem } from '@/lib/vault/records';
-import { useVault } from '@/lib/vault/VaultProvider';
+import { countVaultRecords } from '@/lib/vault/remote';
+import { openLocalStore, useVault } from '@/lib/vault/VaultProvider';
 import type { Dose, Medication, MedicationRow } from '@/lib/vitamins';
 
 export type Pregnancy = PregnancyRow;
@@ -115,9 +119,35 @@ export function useProfile() {
   });
 }
 
+/** Every detail key with its empty value, so a details record has the same shape as the old server row. */
+function emptyDetails(): Record<string, unknown> {
+  return Object.fromEntries(PREGNANCY_DETAILS.map((k) => [k, k === 'conditions' ? [] : k === 'units' ? 'metric' : null]));
+}
+
+/**
+ * Saves the pregnancy details on this phone, encrypted with the household key
+ * (made here for a new household), before the vault provider is mounted. The
+ * provider then finds the key in the keychain and syncs the record.
+ */
+async function keepDetailsOnPhone(pregnancyId: string, details: Record<string, unknown>): Promise<void> {
+  if (Platform.OS === 'web') return; // The web build has no vault; health details stay on phones.
+  const resolved = await resolveHouseholdKey({
+    role: 'owner',
+    loadKey: () => loadHouseholdKey(pregnancyId),
+    saveKey: (key) => saveHouseholdKey(pregnancyId, key),
+    countRecords: () => countVaultRecords(pregnancyId),
+  });
+  // Only happens when this household already has records and this phone lacks the key; the app asks for it next.
+  if (resolved.status !== 'ready') return;
+  const store = await openLocalStore();
+  await writeRecord(store, { id: pregnancyDetailsId(pregnancyId), pregnancyId, kind: PREGNANCY_KIND, data: details });
+}
+
 /**
  * Saves onboarding: the profile name, the pregnancy (its owner membership is
- * added by a database trigger) and the reminder choices. Does not refresh the
+ * added by a database trigger) and the reminder choices. The pregnancy row on
+ * the server holds no health details: the dates, health questions and
+ * contacts are kept on this phone in the vault. Does not refresh the
  * membership query, so the "You're all set" screen can show before the app
  * switches to the tabs; call `finishOnboarding` for that.
  */
@@ -127,12 +157,13 @@ export function useCreatePregnancy() {
     mutationFn: async (answers: Answers) => {
       const userId = session?.user.id;
       if (!userId) throw new Error('Not signed in.');
-      const row = toPregnancyInsert(answers, localToday());
+      const answered = toPregnancyDetails(answers, localToday());
+      const details = { ...emptyDetails(), ...answered, due_date: dueDateFromLmp(answered.lmp_date) };
 
       const { error: profileError } = await supabase.from('profiles').update({ name: answers.name.trim() }).eq('id', userId);
       if (profileError) throw profileError;
 
-      // If an earlier attempt got as far as creating the pregnancy, update it
+      // If an earlier attempt got as far as creating the pregnancy, reuse it
       // rather than creating a second one.
       const { data: existing, error: findError } = await supabase
         .from('pregnancies')
@@ -143,13 +174,16 @@ export function useCreatePregnancy() {
       if (findError) throw findError;
 
       const { data: pregnancy, error } = existing
-        ? await supabase.from('pregnancies').update(row).eq('id', existing.id).select('id').single()
-        : await supabase.from('pregnancies').insert(row).select('id').single();
+        ? { data: existing, error: null }
+        : await supabase.from('pregnancies').insert({}).select('id').single();
       if (error) throw error;
+      const pregnancyId = pregnancy.id as string;
+
+      await keepDetailsOnPhone(pregnancyId, details);
 
       const { error: prefsError } = await supabase.from('reminder_prefs').upsert(
         REMINDERS.map((r) => ({
-          pregnancy_id: pregnancy.id,
+          pregnancy_id: pregnancyId,
           user_id: userId,
           kind: r.kind,
           enabled: answers.reminders[r.kind],
@@ -157,7 +191,7 @@ export function useCreatePregnancy() {
         { onConflict: 'pregnancy_id,user_id,kind' },
       );
       if (prefsError) throw prefsError;
-      return pregnancy.id as string;
+      return pregnancyId;
     },
   });
 }

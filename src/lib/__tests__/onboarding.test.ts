@@ -1,4 +1,4 @@
-import { datingFor, emptyAnswers, toggleCondition, toPregnancyInsert, type Answers } from '../onboarding';
+import { datingFor, emptyAnswers, toggleCondition, toPregnancyDetails, type Answers } from '../onboarding';
 
 const today = '2026-10-03';
 
@@ -37,7 +37,7 @@ describe('datingFor', () => {
   });
 });
 
-describe('toPregnancyInsert', () => {
+describe('toPregnancyDetails', () => {
   const answers: Answers = {
     ...emptyAnswers,
     name: 'Ananya',
@@ -56,8 +56,8 @@ describe('toPregnancyInsert', () => {
     hospital: 'City Hospital',
   };
 
-  it('maps answers to the pregnancies columns', () => {
-    expect(toPregnancyInsert(answers, today)).toEqual({
+  it('maps answers to the pregnancy details', () => {
+    expect(toPregnancyDetails(answers, today)).toEqual({
       lmp_date: '2026-04-15',
       method: 'ivf',
       ivf_transfer_date: '2026-05-04',
@@ -78,7 +78,7 @@ describe('toPregnancyInsert', () => {
   });
 
   it('leaves skipped and out-of-range answers empty', () => {
-    const row = toPregnancyInsert(
+    const row = toPregnancyDetails(
       { ...emptyAnswers, date: '2026-04-15', heightCm: '16.2', preWeightKg: 'abc', bloodGroup: "Don't know", conditions: ['None'] },
       today,
     );
@@ -97,7 +97,7 @@ describe('toPregnancyInsert', () => {
   });
 
   it('refuses to build a row without a valid date', () => {
-    expect(() => toPregnancyInsert(emptyAnswers, today)).toThrow();
+    expect(() => toPregnancyDetails(emptyAnswers, today)).toThrow();
   });
 });
 

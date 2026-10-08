@@ -312,6 +312,16 @@ select pg_temp.rejects(
   '23503', 'a dose for someone else''s medication');
 delete from public.pregnancies where id = (select pregnancy_id from strangers_pregnancy);
 
+-- A household set up since the details moved to the vault has none on the server.
+create temp table empty_pregnancy as
+with p as (insert into public.pregnancies default values returning id, lmp_date, due_date)
+select * from p;
+select pg_temp.check((select lmp_date is null and due_date is null from empty_pregnancy), 'a pregnancy can be created with no details');
+select pg_temp.check(
+  (select count(*) = 1 from public.members m join empty_pregnancy e on e.id = m.pregnancy_id where m.user_id = auth.uid() and m.role = 'owner'),
+  'its creator still becomes the owner');
+delete from public.pregnancies where id = (select id from empty_pregnancy);
+
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
 select pg_temp.check(
   (select count(*) = 2 and bool_and(name <> 'hacked') from public.medications),

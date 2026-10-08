@@ -1,6 +1,6 @@
 {
   "title": "Bloom privacy policy",
-  "updated": "5 October 2026",
+  "updated": "8 October 2026",
   "contactEmail": null,
   "intro": [
     "Bloom is a pregnancy diary for one household: the person who is pregnant and, if she invites them, her partner. This policy says what Bloom keeps, where it goes and how to delete it. Bloom has no ads, no analytics and no tracking, and never sells or shares your data for advertising."
@@ -9,7 +9,7 @@
     {
       "heading": "What stays locked on your phone",
       "paragraphs": [
-        "Your diary lives on your phone. Check-ins, weight, blood pressure, blood sugar, kicks, water, meals, vitamins and medicines, appointments, mood and symptoms, contractions, saved reports, bump photos, weekly card notes and your profile details are stored in an on-phone database.",
+        "Your diary lives on your phone. Your pregnancy details (the dates, health questions, doctor, hospital and emergency contact you give when setting Bloom up), check-ins, weight, blood pressure, blood sugar, kicks, water, meals, vitamins and medicines, appointments, mood and symptoms, contractions, saved reports, bump photos and weekly card notes are stored in an on-phone database.",
         "To keep two phones in step, each record is locked (encrypted with XChaCha20-Poly1305) with your household key before it leaves the phone. Only the locked copy is uploaded. The household key itself never leaves your phones: it moves from one phone to the other by QR code or a recovery phrase you write down. Nobody else, including the developer and our hosting provider, can read these records."
       ]
     },
@@ -20,8 +20,7 @@
       ],
       "bullets": [
         "Your account: your name, email address and profile picture link from Google, and a user ID.",
-        "Who belongs to the household (owner or partner) and short-lived invite codes.",
-        "The answers given when Bloom was first set up (such as due date or last period date, how many babies, health conditions, blood group, height and weight before pregnancy, doctor, hospital and emergency contact), so that a partner joining by code sees the same pregnancy. Later changes to these details are kept locked on the phone instead.",
+        "Who belongs to the household (owner or partner) and short-lived invite codes. The household itself is just an ID: its details are locked on your phones.",
         "Which reminders are on and at what times.",
         "A daily count of how many scans the household has started, so a fault cannot run up costs.",
         "The locked records described above, which the service cannot open."

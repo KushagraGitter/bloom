@@ -25,6 +25,8 @@ src/app/            routes (each design artboard becomes one)
   contractions.tsx  contraction timer: lengths, gaps and counts per session, earlier sessions, her own "when to call" notes
   profile.tsx       edit details, reminders, units, appearance (System / Light / Dark), partner invite code
   household-key.tsx show the household key as a QR code or recovery phrase, or take it on a new phone
+  unlock.tsx        shown instead of the app until this phone can read the pregnancy details (it needs the household key)
+  privacy.tsx       the privacy policy, also opened by Health Connect's privacy link
   dev/components    dev-only gallery of the shared components
 src/components/     Card, Chip, Toggle, BottomSheet, TabBar, Button, Text, Screen, date and time fields, VaultGate (what a screen on the phone's records shows until they are open)
 src/theme/tokens.ts light and dark palettes, fonts, borders and shadows from the design
