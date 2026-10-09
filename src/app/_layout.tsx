@@ -1,4 +1,5 @@
 import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
+import { Caveat_700Bold } from '@expo-google-fonts/caveat';
 import {
   Figtree_400Regular,
   Figtree_600SemiBold,
@@ -34,6 +35,7 @@ export default function RootLayout() {
     Figtree_600SemiBold,
     Figtree_700Bold,
     Figtree_800ExtraBold,
+    Caveat_700Bold,
   });
 
   if (!loaded && !error) return null;
@@ -138,6 +140,7 @@ function Routes({ signedIn, hasPregnancy }: { signedIn: boolean; hasPregnancy: b
         <Stack.Screen name="connected-health" />
         <Stack.Screen name="week/[week]" />
         <Stack.Screen name="weeks" />
+        <Stack.Screen name="postcards" />
         <Stack.Screen name="dev/components" />
       </Stack.Protected>
       <Stack.Screen name="auth/callback" />

@@ -204,9 +204,14 @@ const SIZES: Record<number, string> = {
   40: 'a watermelon',
 };
 
+/** The fruit or vegetable a week is compared with ("an ear of corn"), or null before week 4. */
+export function sizeOf(weeks: number): string | null {
+  return SIZES[Math.min(weeks, 40)] ?? null;
+}
+
 /** The hero card's "Baby is about the size of …" line, or null before week 4. */
 export function babySizeLine(weeks: number, babies = 1): string | null {
-  const size = SIZES[Math.min(weeks, 40)];
+  const size = sizeOf(weeks);
   if (!size) return null;
   return babies > 1 ? `Each baby is about the size of ${size}` : `Baby is about the size of ${size}`;
 }
