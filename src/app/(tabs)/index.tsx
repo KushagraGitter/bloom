@@ -1,8 +1,11 @@
 import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { BottomSheet, Button, CalendarIcon, Card, CheckIcon, Chip, Screen, SmileIcon, Text, TextField, TimerIcon } from '@/components';
+import { FruitParade } from '@/components/FruitParade';
+import { LifeSizeSheet } from '@/components/LifeSizeSheet';
+import { Postcard } from '@/components/Postcard';
 import { VaultNotice } from '@/components/VaultNotice';
 import { WeekCardsStrip } from '@/components/WeekCardsStrip';
 import { cardLine, dayLong, dayNumber, localTime, monthAbbr, nextUp } from '@/lib/appointments';
@@ -22,13 +25,13 @@ import {
   useToggleDose,
 } from '@/lib/data';
 import { shortDay, timeOf } from '@/lib/format';
+import { arrivesOn, postcardWeek, postmarkText, usePostcardSeen } from '@/lib/postcards';
 import { gestationalAge, localToday } from '@/lib/pregnancy';
 import { formatDate, initialOf } from '@/lib/profile';
 import {
   CHECKINS,
   SUGAR_CONTEXTS,
   WATER_GOAL,
-  babySizeLine,
   checkinMeta,
   countOf,
   formatCheckin,
@@ -41,7 +44,6 @@ import {
 } from '@/lib/readings';
 import { useSession } from '@/lib/session';
 import { TIMES, doseKey, doseLine, dueOn, indexDoses, inDisplayOrder, tickedBy } from '@/lib/vitamins';
-import { deckWeek } from '@/lib/weeklyCards';
 import { AccentZone, isAccentFill, makeStyles, useTheme } from '@/theme/theme';
 import { accents, fonts, radius, touchTarget } from '@/theme/tokens';
 
@@ -63,6 +65,7 @@ export default function TodayScreen() {
   const members = useMembers(pregnancyId);
 
   const [sheet, setSheet] = useState<CheckinType | null>(null);
+  const [lifeSize, setLifeSize] = useState<number | null>(null);
 
   // The root layout only shows the tabs once a pregnancy exists.
   if (!pregnancy) return null;
@@ -71,8 +74,6 @@ export default function TodayScreen() {
   const ga = gestationalAge(pregnancy.lmp_date, day);
   const name = profile.data?.name?.trim();
   const firstName = name?.split(' ')[0];
-  const sizeLine = babySizeLine(ga.weeks, pregnancy.babies);
-  const cardWeek = deckWeek(ga.weeks);
   const rows = today.data ?? [];
 
   const whoLogged = (r: Reading) => {
@@ -103,34 +104,19 @@ export default function TodayScreen() {
 
       <VaultNotice />
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityHint="Opens this week’s cards"
-        disabled={cardWeek === null}
-        onPress={() => cardWeek !== null && router.push(`/week/${cardWeek}`)}>
-        <Card tone={colors.purple} size="hero" elevation="lg" style={styles.hero}>
-          <View style={styles.sun} />
-          <View style={styles.weekBadge}>
-            <Text style={styles.weekNum}>{ga.weeks}</Text>
-            <Text style={styles.weekLbl}>WEEKS</Text>
-          </View>
-          <Text style={styles.kicker} color={colors.onPurple}>
-            TRIMESTER {ga.trimester} · DAY {ga.days}
+      <Card tone={colors.purple} size="hero" elevation="lg" style={styles.hero}>
+        <FruitParade weeks={ga.weeks} babies={pregnancy.babies} onLifeSize={setLifeSize} />
+        <View style={styles.row}>
+          <Text variant="label" color={colors.onPurple}>
+            {Math.ceil(ga.daysToGo / 7)} weeks to go
           </Text>
-          {sizeLine && <Text style={styles.size}>{sizeLine}</Text>}
-          <View style={[styles.track, !sizeLine && styles.trackLow]}>
-            <View style={[styles.fill, { width: `${Math.round(ga.progress * 100)}%` }]} />
-          </View>
-          <View style={styles.row}>
-            <Text variant="label" color={colors.onPurple}>
-              {Math.ceil(ga.daysToGo / 7)} weeks to go
-            </Text>
-            <Text variant="label" color={colors.onPurple}>
-              Due {formatDate(pregnancy.due_date)}
-            </Text>
-          </View>
-        </Card>
-      </Pressable>
+          <Text variant="label" color={colors.onPurple}>
+            Due {formatDate(pregnancy.due_date)}
+          </Text>
+        </View>
+      </Card>
+
+      <TodayPostcard weeks={ga.weeks} lmpDate={pregnancy.lmp_date} babies={pregnancy.babies} />
 
       <WeekCardsStrip pregnancyId={pregnancy.id} weeks={ga.weeks} />
 
@@ -185,7 +171,34 @@ export default function TodayScreen() {
       <NextAppointment pregnancyId={pregnancy.id} />
 
       <CheckinSheet type={sheet} units={units} pregnancyId={pregnancy.id} onClose={() => setSheet(null)} />
+      <LifeSizeSheet week={lifeSize} onClose={() => setLifeSize(null)} />
     </Screen>
+  );
+}
+
+/** This week's postcard from the baby, with a way into the postcard box. */
+function TodayPostcard({ weeks, lmpDate, babies }: { weeks: number; lmpDate: string; babies: number }) {
+  const styles = useStyles();
+  const seen = usePostcardSeen();
+  const load = seen.load;
+  useEffect(() => {
+    load();
+  }, [load]);
+  const week = postcardWeek(weeks);
+  if (week === null) return null;
+  return (
+    <View style={styles.postcard}>
+      <Postcard
+        week={week}
+        babies={babies}
+        postmark={postmarkText(arrivesOn(lmpDate, week))}
+        fresh={seen.week !== null && seen.week < week}
+        onRead={() => seen.markSeen(week)}
+      />
+      <Pressable accessibilityRole="link" hitSlop={8} onPress={() => router.push(`/postcards?week=${week}`)} style={styles.postcardLink}>
+        <Text style={styles.seeAll}>Your postcard box</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -480,34 +493,9 @@ const useStyles = makeStyles(({ colors, border }) => ({
     justifyContent: 'center',
   },
   avatarText: { fontFamily: fonts.display, fontSize: 18, color: colors.onAccent },
-  hero: { padding: 22, gap: 14, minHeight: 170 },
-  sun: {
-    position: 'absolute',
-    right: -36,
-    top: -36,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: colors.yellow,
-    borderWidth: border.width,
-    borderColor: colors.onAccent,
-  },
-  weekBadge: { position: 'absolute', right: 22, top: 26, alignItems: 'center' },
-  weekNum: { fontFamily: fonts.display, fontSize: 44, lineHeight: 46, color: colors.onAccent },
-  weekLbl: { fontFamily: fonts.bodyBold, fontSize: 12, letterSpacing: 1, color: colors.onAccent },
-  kicker: { fontFamily: fonts.bodyBold, fontSize: 13, letterSpacing: 1, maxWidth: 200 },
-  size: { fontFamily: fonts.displayBold, fontSize: 22, lineHeight: 25, color: colors.onPurple, maxWidth: 200 },
-  track: {
-    height: 12,
-    borderRadius: 99,
-    borderWidth: border.width,
-    borderColor: colors.onAccent,
-    backgroundColor: colors.glass,
-    overflow: 'hidden',
-  },
-  // Clears the week badge when there is no size line above the bar.
-  trackLow: { marginTop: 40 },
-  fill: { height: '100%', backgroundColor: colors.mint },
+  hero: { padding: 22, gap: 10 },
+  postcard: { gap: 10 },
+  postcardLink: { alignSelf: 'flex-end' },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   section: { gap: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },

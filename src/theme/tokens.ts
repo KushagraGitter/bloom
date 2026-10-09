@@ -99,6 +99,8 @@ export const fonts = {
   bodyMedium: 'Figtree_600SemiBold',
   bodyBold: 'Figtree_700Bold',
   bodyHeavy: 'Figtree_800ExtraBold',
+  /** Handwriting, only for the baby's postcards. */
+  hand: 'Caveat_700Bold',
 } as const;
 
 export const fontSize = {
